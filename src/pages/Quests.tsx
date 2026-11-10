@@ -8,6 +8,8 @@ import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty, PageHeader } from '../components/ui';
 
 type Tab = 'habit' | 'todo' | 'goal';
+const ADD_LABEL: Record<Tab, string> = { habit: 'Add Habit', todo: 'Add To-do', goal: 'Add Goal' };
+
 const TABS: { id: Tab; label: string }[] = [
   { id: 'habit', label: 'Habits' },
   { id: 'todo', label: 'To-dos' },
@@ -46,6 +48,21 @@ export default function Quests() {
           </button>
         ))}
       </div>
+
+      <motion.button
+        type="button"
+        whileTap={{ scale: 0.98 }}
+        onClick={() => setEdit({ kind: tab })}
+        className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ember/50 bg-ember-dark/15 py-3 font-display text-sm font-bold tracking-wider text-ember-light transition hover:border-ember hover:bg-ember-dark/30"
+        data-testid="add-bar"
+      >
+        <Plus size={18} strokeWidth={2.5} />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span key={tab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.12 }}>
+            {ADD_LABEL[tab]}
+          </motion.span>
+        </AnimatePresence>
+      </motion.button>
 
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-5">
@@ -97,17 +114,6 @@ export default function Quests() {
           )}
         </motion.div>
       </AnimatePresence>
-
-      <motion.button
-        whileTap={{ scale: 0.9 }}
-        whileHover={{ scale: 1.05 }}
-        onClick={() => setEdit({ kind: tab })}
-        className="fixed bottom-[calc(5.5rem+var(--safe-bottom))] right-5 z-30 grid h-14 w-14 place-items-center rounded-2xl border border-ember-light/60 bg-gradient-to-b from-ember-light to-ember text-void shadow-glow md:bottom-8 md:right-8"
-        aria-label={`New ${tab}`}
-        data-testid="fab"
-      >
-        <Plus size={26} strokeWidth={2.5} />
-      </motion.button>
 
       <ItemEditor target={edit} onClose={() => setEdit(null)} />
     </div>
