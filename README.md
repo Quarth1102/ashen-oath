@@ -11,7 +11,7 @@ npm test         # game-logic unit tests
 npm run build    # production build + PWA service worker in dist/
 ```
 
-To install it on a phone, host `dist/` on any static host (Netlify, Vercel, GitHub Pages, Cloudflare Pages), open the site, and choose "Add to Home Screen".
+**Hosting:** every push to `main` runs `.github/workflows/deploy.yml`, which tests, builds, and publishes to GitHub Pages at `https://<user>.github.io/ashen-oath/`. To install it on a phone, open that URL and choose "Add to Home Screen".
 
 ## How it plays
 
