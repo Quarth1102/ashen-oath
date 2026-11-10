@@ -18,6 +18,7 @@ npm run build    # production build + PWA service worker in dist/
 - **Habits:** a *virtue* is done on set days or X times a week. A *vice* is something to resist: tap the skull when you give in.
 - **To-dos** are one-off tasks. **Goals** are quests made of milestones. Finishing a goal gives big XP and an optional title.
 - **XP** is split across the stats a deed is tagged with. Your hero and each stat level up on their own curves. Daily streaks add up to +50% XP.
+- **Classes are earned.** You start as a Wanderer, and at level 3 your class awakens from the stats you train most. A single dominant stat gives a pure class (Strength → Knight, Wisdom → Witch, and so on). Two close top stats give one of 15 hybrids, such as Strength + Discipline → Templar. Training everything evenly makes an Ashen Paragon. Your class is reassessed each new day and each level-up, adds a small XP bonus to its stats, and grants themed gear the first time you reach it. The thresholds are in `src/game/classes.ts`.
 - **Gold** is half the XP you earn. Spend it in the Market on gear, which changes your sprite and adds a bonus to one stat's XP. Every deed has a 5% chance to drop a loot chest.
 - **Penalties:** missed daily habits and giving in to vices cost HP. At 0 HP you *fall*: you lose 10% of your gold and the XP toward your next level, but never a level or a stat. You can turn penalties off in Settings.
 - **Regions** unlock as you level: Ashen Hamlet (1), Gloomwood (5), Drowned Marsh (10), Bone Cathedral (20), Obsidian Peaks (35).

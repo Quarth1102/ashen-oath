@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Pencil } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { useHeroLook, useRegion } from '../hooks';
+import { useHeroClass, useHeroLook, useRegion } from '../hooks';
 import HeroSprite from '../components/HeroSprite';
 import Landscape from '../components/Landscape';
 import Radar from '../components/Radar';
@@ -10,7 +10,7 @@ import AppearanceEditor from '../components/AppearanceEditor';
 import { Icon } from '../components/Icon';
 import { Bar, Sheet } from '../components/ui';
 import { statXpToNext, heroXpToNext } from '../game/xp';
-import { CLASS_BY_ID } from '../data/classes';
+import ClassPanel from '../components/ClassPanel';
 import { GEAR_BY_ID, RARITY_COLOR, SLOTS, SLOT_NAME } from '../data/gear';
 import type { Appearance, Slot } from '../game/types';
 import { rgba } from '../art/color';
@@ -21,7 +21,7 @@ export default function Hero() {
   const { updateHero, equip, unequip } = useGame.getState();
   const look = useHeroLook()!;
   const region = useRegion();
-  const cls = CLASS_BY_ID[hero.classId];
+  const cls = useHeroClass();
   const [slot, setSlot] = useState<Slot | null>(null);
   const [editLook, setEditLook] = useState<Appearance | null>(null);
   const [editStory, setEditStory] = useState<{ name: string; backstory: string } | null>(null);
@@ -36,7 +36,7 @@ export default function Hero() {
           <Landscape region={region} className="h-64 w-full">
             {(g, s) => (
               <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: g - 4 * s }}>
-                <HeroSprite look={look} size={Math.round(32 * s * 1.25)} aura={cls?.aura} />
+                <HeroSprite look={look} size={Math.round(32 * s * 1.25)} aura={cls.aura} />
               </div>
             )}
           </Landscape>
@@ -55,7 +55,7 @@ export default function Hero() {
               </div>
               <div className="text-right">
                 <p className="font-pixel text-2xl text-ember-light">LV {hero.level}</p>
-                <p className="text-xs text-bone-faint">{cls?.name}</p>
+                <p className="text-xs text-bone-faint">{cls.name}</p>
               </div>
             </div>
             <Bar value={hero.xp} max={heroXpToNext(hero.level)} color="#e0a33a" glow />
@@ -69,6 +69,7 @@ export default function Hero() {
         </div>
 
         <div className="space-y-4">
+          <ClassPanel />
           <div className="panel p-4">
             <h2 className="h-display mb-3 text-lg font-bold">Attributes</h2>
             <Radar defs={defs} stats={hero.stats} />
@@ -151,7 +152,7 @@ export default function Hero() {
         {editLook && (
           <div className="space-y-4">
             <div className="sticky top-0 z-10 -mx-1 flex justify-center rounded-xl bg-ash-900 py-2 shadow-lg">
-              <HeroSprite look={{ ...look, appearance: editLook }} size={128} aura={cls?.aura} />
+              <HeroSprite look={{ ...look, appearance: editLook }} size={128} aura={cls.aura} />
             </div>
             <AppearanceEditor value={editLook} onChange={setEditLook} />
           </div>

@@ -11,7 +11,7 @@ import { BASE_XP, addXp, heroXpToNext, maxHpFor, splitXp, statXpToNext, streakMu
 import { FALL_GOLD_LOSS, damageFor, regenFor } from './penalty';
 import { LOOT_CHANCE, RARITY_GOLD, goldFor, rollRarity } from './economy';
 import { GEAR, GEAR_BY_ID } from '../data/gear';
-import { CLASS_BY_ID } from '../data/classes';
+import { classBonus, determineClassId, normalizeClassId, resolveClass, CLASS_UNLOCK_LEVEL } from './classes';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { regionsUnlockedBetween } from '../data/regions';
 import { DEFAULT_STATS } from '../data/stats';
@@ -74,6 +74,10 @@ class Tx {
   }
 }
 
+function xpBonus(s: GameState, hero: Hero, statId: string): number {
+  return gearBonus(hero, statId) + classBonus(resolveClass(hero.classId, s.statDefs), statId);
+}
+
 function gearBonus(hero: Hero, statId: string): number {
   let pct = 0;
   for (const id of Object.values(hero.equipped)) {
@@ -83,7 +87,7 @@ function gearBonus(hero: Hero, statId: string): number {
   return pct / 100;
 }
 
-function applyHeroXp(tx: Tx, amount: number) {
+function applyHeroXp(tx: Tx, amount: number): number {
   const hero = tx.hero;
   const before = hero.level;
   const r = addXp({ level: hero.level, xp: hero.xp }, amount, heroXpToNext);
@@ -101,6 +105,36 @@ function applyHeroXp(tx: Tx, amount: number) {
     }
   }
   hero.hp = Math.min(hero.hp, hero.maxHp);
+  return r.gained;
+}
+
+/**
+ * Re-derive the hero's class from their stats. Runs at each new day and each level-up.
+ * Does nothing below the unlock level, so a hero is never demoted back to Wanderer.
+ */
+function evaluateClass(tx: Tx) {
+  const hero = tx.s.hero;
+  if (!hero || hero.level < CLASS_UNLOCK_LEVEL) return;
+  const current = normalizeClassId(hero.classId);
+  const next = determineClassId(tx.s.statDefs, hero.stats, hero.level);
+  if (next === 'wanderer' || next === current) {
+    if (hero.classId !== current) hero.classId = current; // migrate legacy ids quietly
+    return;
+  }
+  const from = resolveClass(current, tx.s.statDefs);
+  const to = resolveClass(next, tx.s.statDefs);
+  hero.classId = next;
+  const attained = (hero.classesAttained ??= []);
+  let kit: string[] = [];
+  if (!attained.includes(next)) {
+    attained.push(next);
+    kit = to.kit.filter((id) => GEAR_BY_ID[id] && !hero.inventory.includes(id));
+    hero.inventory.push(...kit);
+  }
+  if (!hero.titles.includes(to.epithet)) hero.titles.push(to.epithet);
+  if (hero.title === from.epithet || hero.title === 'the Oathsworn') hero.title = to.epithet;
+  tx.emit({ type: 'classchange', from: current, to: next, kit });
+  tx.log('system', from.kind === 'wanderer' ? `Awakened as a ${to.name}.` : `Became a ${to.name} (was ${from.name}).`);
 }
 
 function applyStatXp(tx: Tx, statId: string, amount: number) {
@@ -119,7 +153,7 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, hp
   if (valid.length) {
     splitXp(Math.round(base), valid.length).forEach((part, i) => {
       const id = valid[i];
-      const gain = Math.round(part * (1 + gearBonus(hero, id)));
+      const gain = Math.round(part * (1 + xpBonus(tx.s, hero, id)));
       stats[id] = gain;
       total += gain;
     });
@@ -128,8 +162,9 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, hp
   }
   const gold = goldFor(total);
 
-  applyHeroXp(tx, total);
+  const leveled = applyHeroXp(tx, total) > 0;
   for (const [id, gain] of Object.entries(stats)) applyStatXp(tx, id, gain);
+  if (leveled) evaluateClass(tx);
   hero.gold += gold;
 
   const hpBefore = hero.hp;
@@ -230,7 +265,6 @@ export function habitXpPreview(h: Habit): number {
 export interface NewHeroInput {
   name: string;
   backstory: string;
-  classId: string;
   appearance: Appearance;
   statDefs: StatDef[];
   starterQuests: boolean;
@@ -238,21 +272,19 @@ export interface NewHeroInput {
 
 export function createHero(state: GameState, input: NewHeroInput, ctx: Ctx): Result {
   const tx = new Tx(state, ctx);
-  const cls = CLASS_BY_ID[input.classId] ?? CLASS_BY_ID.knight;
   tx.s.statDefs = input.statDefs.length ? input.statDefs : DEFAULT_STATS.map((d) => ({ ...d }));
   const stats: Hero['stats'] = {};
-  for (const d of tx.s.statDefs) stats[d.id] = { level: d.id === cls.bonusStat ? 2 : 1, xp: 0 };
-  const equipped: Hero['equipped'] = {};
-  for (const id of cls.starter) equipped[GEAR_BY_ID[id].slot] = id;
+  for (const d of tx.s.statDefs) stats[d.id] = { level: 1, xp: 0 };
   tx.s.hero = {
     name: input.name.trim() || 'Nameless',
-    title: cls.epithet,
+    title: 'the Oathsworn',
     backstory: input.backstory.trim(),
-    classId: cls.id,
+    classId: 'wanderer',
+    classesAttained: [],
     appearance: input.appearance,
-    equipped,
-    inventory: [...cls.starter],
-    titles: [cls.epithet, 'the Oathsworn'],
+    equipped: {},
+    inventory: [],
+    titles: ['the Oathsworn'],
     level: 1,
     xp: 0,
     totalXp: 0,
@@ -495,6 +527,7 @@ export function processDay(state: GameState, ctx: Ctx): Result {
     }
   }
   s.lastProcessedDay = tx.today;
+  evaluateClass(tx);
   if (missed.length || totalDmg) {
     tx.emit({ type: 'dayreport', missed: [...new Set(missed)], damage: totalDmg, days });
   }

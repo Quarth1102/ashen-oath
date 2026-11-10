@@ -6,13 +6,14 @@ import type { GameEvent } from '../game/types';
 import { ACHIEVEMENT_BY_ID } from '../data/achievements';
 import { REGION_BY_ID } from '../data/regions';
 import { GEAR_BY_ID, RARITY_COLOR, SLOT_NAME } from '../data/gear';
-import { CLASS_BY_ID } from '../data/classes';
+import { useHeroClass } from '../hooks';
+import { resolveClass, CLASS_BONUS } from '../game/classes';
 import HeroSprite from './HeroSprite';
 import Landscape from './Landscape';
 import { Icon } from './Icon';
 import { rgba } from '../art/color';
 
-const MODAL_TYPES = ['fall', 'dayreport', 'levelup', 'region', 'goal', 'loot'] as const;
+const MODAL_TYPES = ['fall', 'dayreport', 'levelup', 'classchange', 'region', 'goal', 'loot'] as const;
 type ModalEvent = Extract<GameEvent, { type: (typeof MODAL_TYPES)[number] }>;
 const TOAST_TYPES = ['achievement', 'statup', 'chest', 'damage'] as const;
 
@@ -119,9 +120,11 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
   const hero = useGame((s) => s.hero);
   const equip = useGame((s) => s.equip);
   const updateSettings = useGame((s) => s.updateSettings);
+  const defs = useGame((s) => s.statDefs);
+  const cls = useHeroClass();
   if (!hero) return null;
   const look = { appearance: hero.appearance, equipped: hero.equipped };
-  const aura = CLASS_BY_ID[hero.classId]?.aura;
+  const aura = cls.aura;
 
   let content: React.ReactNode = null;
   let tone = '#e0a33a';
@@ -140,6 +143,41 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
         </>
       );
       break;
+    case 'classchange': {
+      const from = resolveClass(event.from, defs);
+      const to = resolveClass(event.to, defs);
+      tone = to.aura;
+      const statNames = to.stats.map((id) => defs.find((d) => d.id === id)?.name).filter(Boolean);
+      const pct = to.kind === 'pure' ? CLASS_BONUS.pure : to.kind === 'hybrid' ? CLASS_BONUS.hybrid : CLASS_BONUS.paragon;
+      const equipKit = () => { event.kit.forEach((id) => equip(id)); onClose(); };
+      content = (
+        <>
+          <Rays color={tone} />
+          <p className="label">{from.kind === 'wanderer' ? 'Your path is revealed' : `No longer a ${from.name}`}</p>
+          <HeroSprite
+            look={event.kit.length ? { ...look, equipped: { ...look.equipped, ...Object.fromEntries(event.kit.map((id) => [GEAR_BY_ID[id].slot, id])) } } : look}
+            size={144}
+            aura={to.aura}
+            celebrate={event.id}
+            className="mt-2"
+          />
+          <motion.h2 initial={{ scale: 2, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 14, delay: 0.15 }} className="h-display text-3xl font-black" style={{ color: to.aura }}>
+            {to.name}
+          </motion.h2>
+          <p className="text-xs" style={{ color: to.aura }}>{to.epithet}</p>
+          <p className="mt-3 text-sm text-bone-dim">{to.desc}</p>
+          <p className="mt-2 text-xs text-bone-faint">
+            Earned through {statNames.length > 2 ? 'balance in all things' : statNames.join(' and ')}. +{pct}% XP to {to.kind === 'paragon' ? 'every stat' : statNames.join(' and ')}.
+          </p>
+          {event.kit.length > 0 && <p className="mt-2 text-xs text-spectral">Class gear added to your inventory: {event.kit.map((id) => GEAR_BY_ID[id].name).join(', ')}.</p>}
+          <div className="mt-6 flex w-full gap-2">
+            {event.kit.length > 0 && <button className="btn-primary flex-1" onClick={equipKit}>Wear class gear</button>}
+            <button className={`${event.kit.length ? 'btn-ghost' : 'btn-primary'} flex-1`} onClick={onClose} autoFocus>Onward</button>
+          </div>
+        </>
+      );
+      break;
+    }
     case 'region': {
       const r = REGION_BY_ID[event.regionId];
       tone = r.accent;

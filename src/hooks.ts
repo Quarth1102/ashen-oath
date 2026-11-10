@@ -4,6 +4,8 @@ import { dayKey } from './game/dates';
 import { REGION_BY_ID, highestRegion, type Region } from './data/regions';
 import type { SpriteLook } from './art/sprite';
 import type { Hero } from './game/types';
+import { resolveClass } from './game/classes';
+import type { ClassInfo } from './data/classes';
 
 export function useNow(intervalMs = 60_000) {
   const [now, setNow] = useState(() => new Date());
@@ -55,4 +57,11 @@ export function useHeroLook(): SpriteLook | null {
   const ap = useGame((s) => s.hero?.appearance);
   const eq = useGame((s) => s.hero?.equipped);
   return useMemo(() => (ap && eq ? { appearance: ap, equipped: eq } : null), [ap, eq]);
+}
+
+/** The hero's current (earned) class, resolved against their stat definitions. */
+export function useHeroClass(): ClassInfo {
+  const classId = useGame((s) => s.hero?.classId ?? 'wanderer');
+  const defs = useGame((s) => s.statDefs);
+  return useMemo(() => resolveClass(classId, defs), [classId, defs]);
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Flame, Plus } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { useHeroLook, useRegion, useToday } from '../hooks';
+import { useHeroClass, useHeroLook, useRegion, useToday } from '../hooks';
 import Landscape from '../components/Landscape';
 import HeroSprite from '../components/HeroSprite';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
@@ -12,7 +12,6 @@ import { Empty } from '../components/ui';
 import { Hud } from '../components/Chrome';
 import { isDueOn } from '../game/engine';
 import { activeStreak } from '../game/streaks';
-import { CLASS_BY_ID } from '../data/classes';
 
 function greeting(h: number) {
   if (h < 5) return 'The night is deep';
@@ -45,7 +44,7 @@ export default function Camp() {
     .slice(0, 5);
   const activeGoals = goals.filter((g) => !g.done).slice(0, 2);
   const streak = activeStreak(activity, today);
-  const cls = CLASS_BY_ID[hero.classId];
+  const cls = useHeroClass();
 
   return (
     <div className="space-y-5">
@@ -53,7 +52,7 @@ export default function Camp() {
         <Landscape region={region} className="h-[46vh] min-h-[300px] w-full md:rounded-2xl md:ring-1 md:ring-ash-600/50">
           {(g, s) => (
             <div className="absolute left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ bottom: g - 4 * s }}>
-              <HeroSprite look={look} size={Math.round(32 * s * 1.15)} aura={cls?.aura} celebrate={lastReward?.id} />
+              <HeroSprite look={look} size={Math.round(32 * s * 1.15)} aura={cls.aura} celebrate={lastReward?.id} />
             </div>
           )}
         </Landscape>

@@ -27,7 +27,10 @@ export interface Hero {
   name: string;
   title: string;
   backstory: string;
+  /** earned class id: 'wanderer' | 'pure:<stat>' | 'hybrid:<a>+<b>' | 'paragon' */
   classId: string;
+  /** every class ever reached (its gear kit is granted only once) */
+  classesAttained?: string[];
   appearance: Appearance;
   equipped: Partial<Record<Slot, string>>;
   inventory: string[];
@@ -172,7 +175,8 @@ export type GameEvent =
   | { id: string; type: 'fall'; goldLost: number; xpLost: number }
   | { id: string; type: 'loot'; rarity: Rarity; itemId?: string; gold?: number }
   | { id: string; type: 'goal'; goalId: string; title?: string }
-  | { id: string; type: 'dayreport'; missed: string[]; damage: number; days: number };
+  | { id: string; type: 'dayreport'; missed: string[]; damage: number; days: number }
+  | { id: string; type: 'classchange'; from: string; to: string; kit: string[] };
 
 export type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 export type NewEvent = DistributiveOmit<GameEvent, 'id'>;

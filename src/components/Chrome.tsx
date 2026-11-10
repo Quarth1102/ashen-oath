@@ -5,8 +5,7 @@ import { useGame } from '../store/useGame';
 import { heroXpToNext } from '../game/xp';
 import { Bar } from './ui';
 import HeroSprite from './HeroSprite';
-import { useHeroLook } from '../hooks';
-import { CLASS_BY_ID } from '../data/classes';
+import { useHeroClass, useHeroLook } from '../hooks';
 
 export const NAV = [
   { to: '/', label: 'Camp', icon: Tent },
@@ -28,6 +27,7 @@ export function Hud() {
   const hero = useGame((s) => s.hero);
   const chests = useGame((s) => s.pendingChests);
   const look = useHeroLook();
+  const cls = useHeroClass();
   if (!hero || !look) return null;
   const need = heroXpToNext(hero.level);
   return (
@@ -40,7 +40,7 @@ export function Hud() {
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-baseline justify-between gap-2">
           <p className="truncate font-display text-sm font-bold">
-            {hero.name} <span className="font-body text-xs font-normal text-bone-faint">{CLASS_BY_ID[hero.classId]?.name}</span>
+            {hero.name} <span className="font-body text-xs font-normal text-bone-faint">{cls.name}</span>
           </p>
           <p className="font-pixel text-xs text-ember-light" data-testid="hud-level">LV {hero.level}</p>
         </div>

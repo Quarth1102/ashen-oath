@@ -6,18 +6,20 @@ import { activeStreak } from './streaks';
 import { rollRarity } from './economy';
 import type { Ctx, GameState } from './types';
 import { DEFAULT_STATS } from '../data/stats';
-import { CLASS_BY_ID } from '../data/classes';
+import { DEFAULT_LOOK } from '../data/classes';
+import { determineClassId, resolveClass, totalStatXp, CLASS_UNLOCK_LEVEL } from './classes';
+import type { Progress } from './types';
 
 // Wednesday 2026-11-11, 12:00 local
 const NOON = new Date(2026, 10, 11, 12, 0, 0);
 const at = (d: Date, days = 0, hours = 0) => new Date(d.getTime() + days * 86400_000 + hours * 3600_000);
 const ctx = (now = NOON, rngVal = 0.99): Ctx => ({ now, rng: () => rngVal });
 
-function withHero(classId = 'knight'): GameState {
+function withHero(): GameState {
   return E.createHero(
     E.initialState(),
     {
-      name: 'Test', backstory: '', classId, appearance: CLASS_BY_ID[classId].defaultLook,
+      name: 'Test', backstory: '', appearance: DEFAULT_LOOK,
       statDefs: DEFAULT_STATS.map((d) => ({ ...d })), starterQuests: false,
     },
     ctx(),
@@ -65,12 +67,80 @@ describe('dates', () => {
 });
 
 describe('hero creation', () => {
-  it('applies class bonus and starter gear', () => {
-    const s = withHero('witch');
-    expect(s.hero!.stats.wisdom.level).toBe(2);
+  it('starts as an unclassed Wanderer', () => {
+    const s = withHero();
+    expect(s.hero!.classId).toBe('wanderer');
     expect(s.hero!.stats.strength.level).toBe(1);
-    expect(s.hero!.equipped.weapon).toBe('st-witch-staff');
+    expect(s.hero!.inventory).toEqual([]);
     expect(s.lastProcessedDay).toBe(E.today(s, NOON));
+  });
+});
+
+describe('earned classes', () => {
+  const defs = DEFAULT_STATS;
+  // stat levels → cumulative xp; give exact xp via level 1 + xp field
+  const st = (xp: Record<string, number>): Record<string, Progress> =>
+    Object.fromEntries(defs.map((d) => [d.id, { level: 1, xp: xp[d.id] ?? 0 }]));
+
+  it('stays Wanderer below the unlock level', () => {
+    expect(determineClassId(defs, st({ strength: 500 }), CLASS_UNLOCK_LEVEL - 1)).toBe('wanderer');
+  });
+  it('gives a pure class when one stat dominates', () => {
+    expect(determineClassId(defs, st({ strength: 100, discipline: 40, wisdom: 10 }), 3)).toBe('pure:strength');
+    expect(resolveClass('pure:strength', defs).name).toBe('Knight');
+  });
+  it('gives a hybrid when the top two are close', () => {
+    const id = determineClassId(defs, st({ strength: 100, discipline: 80, wisdom: 10 }), 3);
+    expect(id).toBe('hybrid:discipline+strength');
+    expect(resolveClass(id, defs).name).toBe('Templar');
+    // hybrid gear mixes both parents: Knight plate + sword, Rogue cloak
+    expect(resolveClass(id, defs).kit.sort()).toEqual(['st-knight-armor', 'st-knight-sword', 'st-rogue-cloak'].sort());
+  });
+  it('needs the runner-up to hold a real share for a hybrid', () => {
+    // runner-up is close to the leader, but both are tiny next to a spread of others → paragon-ish, not hybrid
+    expect(determineClassId(defs, st({ strength: 30, vitality: 28, intellect: 27, wisdom: 26, discipline: 25, charisma: 24 }), 3)).toBe('paragon');
+  });
+  it('names classes built from custom stats', () => {
+    const custom = [...defs, { id: 'faith', name: 'Faith', icon: 'moon', color: '#ffffff' }];
+    expect(resolveClass('pure:faith', custom).name).toBe('Faith-Sworn');
+    expect(resolveClass('hybrid:faith+strength', custom).name).toBe('Faith-Strength Adept');
+  });
+  it('maps old picked-class ids', () => {
+    expect(resolveClass('knight', defs).name).toBe('Knight');
+  });
+  it('counts cumulative stat xp across levels', () => {
+    expect(totalStatXp({ level: 3, xp: 5 })).toBe(20 + Math.round(20 * Math.pow(2, 1.4)) + 5);
+  });
+
+  it('awakens on level-up, grants the kit once, and boosts class stat xp', () => {
+    let s = withHero();
+    s.hero!.level = 2;
+    s.hero!.xp = 140; // one hard deed away from level 3 (needs 141)
+    const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['strength'] });
+    const r = E.completeHabit(s, id, ctx());
+    s = r.state;
+    expect(s.hero!.level).toBe(3);
+    expect(s.hero!.classId).toBe('pure:strength');
+    expect(s.hero!.title).toBe('the Unbroken');
+    expect(s.hero!.inventory).toEqual(expect.arrayContaining(['st-knight-armor', 'st-knight-sword']));
+    const ev = r.events.find((e) => e.type === 'classchange');
+    expect(ev && ev.type === 'classchange' && ev.kit.length).toBe(2);
+    // next strength deed gets +10%
+    const before = totalStatXp(s.hero!.stats.strength);
+    s = E.completeHabit(s, id, ctx(at(NOON, 1))).state;
+    expect(totalStatXp(s.hero!.stats.strength) - before).toBe(Math.round(Math.round(40 * 1.02) * 1.1));
+  });
+
+  it('re-evaluates at the new day and switches to a hybrid', () => {
+    let s = withHero();
+    s.hero!.level = 3;
+    s.hero!.classId = 'pure:strength';
+    s.hero!.classesAttained = ['pure:strength'];
+    s.hero!.stats.strength = { level: 1, xp: 100 };
+    s.hero!.stats.discipline = { level: 1, xp: 90 };
+    const r = E.processDay(s, ctx(at(NOON, 1)));
+    expect(r.state.hero!.classId).toBe('hybrid:discipline+strength');
+    expect(r.events.some((e) => e.type === 'classchange')).toBe(true);
   });
 });
 
@@ -115,7 +185,7 @@ describe('completing habits', () => {
     s = E.equip(s, 'helm-iron', ctx()).state; // +8% strength
     const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['strength'] });
     s = E.completeHabit(s, id, ctx()).state;
-    expect(s.hero!.stats.strength.xp).toBe(Math.round(40 * 1.08));
+    expect(totalStatXp(s.hero!.stats.strength)).toBe(Math.round(40 * 1.08));
   });
 
   it('drops a chest when the loot roll succeeds', () => {

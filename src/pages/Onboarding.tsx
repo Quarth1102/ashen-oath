@@ -2,49 +2,36 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Dices } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { CLASSES, CLASS_BY_ID, randomBackstory, randomName } from '../data/classes';
+import { DEFAULT_LOOK, PURE, WANDERER, randomBackstory, randomName } from '../data/classes';
 import { DEFAULT_STATS } from '../data/stats';
 import { REGIONS } from '../data/regions';
-import { GEAR_BY_ID } from '../data/gear';
 import type { Appearance, StatDef } from '../game/types';
 import HeroSprite from '../components/HeroSprite';
 import Landscape from '../components/Landscape';
 import AppearanceEditor from '../components/AppearanceEditor';
 import StatsEditor from '../components/StatsEditor';
-import { Icon } from '../components/Icon';
-import { rgba } from '../art/color';
 
-const STEPS = ['Class', 'Visage', 'Legend', 'Pillars'];
+const STEPS = ['Visage', 'Legend', 'Pillars'];
 
 export default function Onboarding() {
   const createHero = useGame((s) => s.createHero);
   const [step, setStep] = useState(-1);
   const [dir, setDir] = useState(1);
-  const [classId, setClassId] = useState('knight');
-  const [appearance, setAppearance] = useState<Appearance>(CLASS_BY_ID.knight.defaultLook);
+  const [appearance, setAppearance] = useState<Appearance>(DEFAULT_LOOK);
   const [name, setName] = useState('');
   const [backstory, setBackstory] = useState('');
   const [defs, setDefs] = useState<StatDef[]>(() => DEFAULT_STATS.map((d) => ({ ...d })));
   const [starter, setStarter] = useState(true);
-  const [jump, setJump] = useState(0);
 
-  const cls = CLASS_BY_ID[classId];
-  const look = useMemo(
-    () => ({ appearance, equipped: Object.fromEntries(cls.starter.map((id) => [GEAR_BY_ID[id].slot, id])) }),
-    [appearance, cls],
-  );
+  const cls = WANDERER;
+  const look = useMemo(() => ({ appearance, equipped: {} }), [appearance]);
 
   const go = (n: number) => {
     setDir(n > step ? 1 : -1);
     setStep(n);
   };
-  const pickClass = (id: string) => {
-    setClassId(id);
-    setAppearance(CLASS_BY_ID[id].defaultLook);
-    setJump((j) => j + 1);
-  };
   const finish = () =>
-    createHero({ name, backstory, classId, appearance, statDefs: defs.filter((d) => d.name.trim()), starterQuests: starter });
+    createHero({ name, backstory, appearance, statDefs: defs.filter((d) => d.name.trim()), starterQuests: starter });
 
   if (step === -1) {
     return (
@@ -80,7 +67,7 @@ export default function Onboarding() {
         <Landscape region={REGIONS[0]} className="h-56 w-full md:h-64 md:rounded-2xl">
           {(g, s) => (
             <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: g - 4 * s }}>
-              <HeroSprite look={look} size={Math.round(32 * s * 1.1)} aura={cls.aura} celebrate={jump} />
+              <HeroSprite look={look} size={Math.round(32 * s * 1.1)} aura={cls.aura} celebrate={step} />
             </div>
           )}
         </Landscape>
@@ -106,42 +93,11 @@ export default function Onboarding() {
           >
             {step === 0 && (
               <>
-                <h2 className="h-display text-2xl font-bold">Choose your path</h2>
-                <p className="mb-4 mt-1 text-sm text-bone-faint">Your class grants starting gear and a head start in one stat.</p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {CLASSES.map((c) => {
-                    const on = c.id === classId;
-                    const bonus = DEFAULT_STATS.find((d) => d.id === c.bonusStat);
-                    return (
-                      <motion.button
-                        type="button"
-                        key={c.id}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => pickClass(c.id)}
-                        className={`panel p-3 text-left transition ${on ? '' : 'opacity-75 hover:opacity-100'}`}
-                        style={on ? { borderColor: c.aura, boxShadow: `0 0 0 1px ${c.aura}, 0 0 24px ${rgba(c.aura, 0.25)}` } : undefined}
-                        aria-pressed={on}
-                      >
-                        <p className="font-display font-bold" style={{ color: on ? c.aura : undefined }}>{c.name}</p>
-                        <p className="mt-1 text-xs text-bone-faint">{c.desc}</p>
-                        {bonus && (
-                          <p className="mt-2 inline-flex items-center gap-1 text-[11px]" style={{ color: bonus.color }}>
-                            <Icon name={bonus.icon} size={11} /> +1 {bonus.name}
-                          </p>
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-            {step === 1 && (
-              <>
                 <h2 className="h-display mb-4 text-2xl font-bold">Your visage</h2>
                 <AppearanceEditor value={appearance} onChange={setAppearance} />
               </>
             )}
-            {step === 2 && (
+            {step === 1 && (
               <div className="space-y-4">
                 <h2 className="h-display text-2xl font-bold">Your legend</h2>
                 <div className="space-y-2">
@@ -158,14 +114,18 @@ export default function Onboarding() {
                   </div>
                   <textarea id="hero-story" className="input min-h-[110px]" value={backstory} onChange={(e) => setBackstory(e.target.value)} placeholder="Where do you come from? What drives you?" />
                 </div>
-                <p className="text-sm text-bone-faint">You will be known as <span className="text-ember-light">{name || '…'} {cls.epithet}</span>.</p>
+                <p className="text-sm text-bone-faint">You begin as <span className="text-ember-light">{name || '…'} {cls.epithet}</span>, a Wanderer with no class.</p>
               </div>
             )}
-            {step === 3 && (
+            {step === 2 && (
               <div className="space-y-4">
                 <div>
                   <h2 className="h-display text-2xl font-bold">Your pillars</h2>
                   <p className="mt-1 text-sm text-bone-faint">These are the stats your deeds will train. Rename, recolour, add or remove them. You can change them later in Settings.</p>
+                </div>
+                <div className="panel-inset space-y-1.5 p-3 text-xs text-bone-dim">
+                  <p className="font-display text-sm font-bold text-ember-light">Your class is earned, not chosen</p>
+                  <p>At level 3 your class awakens from the stats you train most: Strength makes a {PURE.strength.name}, Wisdom a {PURE.wisdom.name}, Discipline a {PURE.discipline.name}. Train two stats evenly and you become a hybrid, like a Templar (Strength + Discipline). Keep all of them in balance and you may become an Ashen Paragon.</p>
                 </div>
                 <StatsEditor
                   defs={defs}
@@ -187,7 +147,7 @@ export default function Onboarding() {
         <div className="mx-auto flex max-w-2xl gap-2">
           <button className="btn-ghost" onClick={() => go(step - 1)}><ChevronLeft size={16} /> Back</button>
           {step < STEPS.length - 1 ? (
-            <button className="btn-primary flex-1" onClick={() => go(step + 1)} disabled={step === 2 && !name.trim()}>
+            <button className="btn-primary flex-1" onClick={() => go(step + 1)} disabled={step === 1 && !name.trim()}>
               Next <ChevronRight size={16} />
             </button>
           ) : (
