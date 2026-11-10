@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-void text-bone font-body antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* faint grain + vignette over everything */
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 60;
+  background:
+    radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.font-pixel { font-size-adjust: 0.62; letter-spacing: .03em; }
+
+.pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-ash-600/60 bg-gradient-to-b from-ash-800/90 to-ash-900/90 shadow-rune backdrop-blur-sm;
+  }
+  .panel-inset { @apply rounded-lg border border-ash-600/40 bg-ash-900/70; }
+  .h-display { @apply font-display tracking-wide text-bone; }
+  .label { @apply font-pixel text-[11px] uppercase tracking-[.18em] text-bone-faint; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-display text-sm font-bold tracking-wider
+      transition active:scale-[.97] disabled:opacity-40 disabled:pointer-events-none select-none;
+  }
+  .btn-primary {
+    @apply btn text-void bg-gradient-to-b from-ember-light to-ember border border-ember-light/60 shadow-glow hover:brightness-110;
+  }
+  .btn-ghost { @apply btn border border-ash-500/70 bg-ash-800/60 text-bone hover:bg-ash-700/70; }
+  .btn-danger { @apply btn border border-blood-light/50 bg-blood-dark/70 text-bone hover:bg-blood/70; }
+  .input {
+    @apply w-full rounded-lg border border-ash-600/70 bg-ash-900/80 px-3 py-2.5 text-bone placeholder:text-bone-faint/60
+      outline-none transition focus:border-ember/70 focus:ring-2 focus:ring-ember/20;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition select-none;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #352d3c; border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes sprite-idle { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+.sprite-idle { animation: sprite-idle 1.3s steps(2) infinite; }
+
+@keyframes flicker { 0%,100% { opacity: 1; transform: scale(1); } 40% { opacity: .82; transform: scale(.96) translateY(1px); } 70% { opacity: .95; transform: scale(1.03); } }
+.flame { animation: flicker 1.6s ease-in-out infinite; transform-origin: 50% 90%; }
+
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.fog-drift { animation: drift 70s linear infinite; }
+
+@keyframes rays { to { transform: rotate(360deg); } }
+.rays { animation: rays 24s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sprite-idle, .flame, .fog-drift, .rays { animation: none !important; }
+}
