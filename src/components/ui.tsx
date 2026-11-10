@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import type { StatDef } from '../game/types';
 import { rgba } from '../art/color';
@@ -26,39 +27,102 @@ export function Bar({
   );
 }
 
-export function Sheet({ open, onClose, title, children, wide = false }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; wide?: boolean }) {
+/** Tracks the part of the screen that is actually visible (shrinks when the on-screen keyboard opens). */
+function useVisibleViewport(active: boolean) {
+  const read = () => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    return { top: vv?.offsetTop ?? 0, height: vv?.height ?? (typeof window !== 'undefined' ? window.innerHeight : 800) };
+  };
+  const [box, setBox] = useState(read);
+  useEffect(() => {
+    if (!active) return;
+    const vv = window.visualViewport;
+    const update = () => setBox(read());
+    update();
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    return () => {
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [active]);
+  return box;
+}
+
+/** Stops the page behind an open sheet from scrolling (iOS otherwise scrolls the page instead of the sheet). */
+function useScrollLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = [html.style.overflow, body.style.overflow];
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prev[0];
+      body.style.overflow = prev[1];
+    };
+  }, [active]);
+}
+
+export function Sheet({
+  open, onClose, title, children, footer, wide = false,
+}: { open: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+  const view = useVisibleViewport(open);
+  useScrollLock(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
-  return (
+  // Portal to <body>: the animated page wrapper uses transform/filter, which would otherwise
+  // make `position: fixed` relative to the page instead of the screen (pushing the sheet off-screen).
+  return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div
+          className="fixed inset-x-0 z-50 flex items-end justify-center pt-[calc(.75rem+var(--safe-top))] sm:items-center sm:p-6"
+          style={{ top: view.top, height: view.height }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
           <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={onClose} />
           <motion.div
             role="dialog"
+            aria-modal="true"
             aria-label={title}
-            className={`panel relative max-h-[88vh] w-full overflow-y-auto rounded-b-none p-5 pb-[calc(1.25rem+var(--safe-bottom))] sm:rounded-xl ${wide ? 'sm:max-w-2xl' : 'sm:max-w-lg'}`}
+            className={`panel relative flex max-h-full w-full flex-col overflow-hidden rounded-b-none sm:rounded-xl ${wide ? 'sm:max-w-2xl' : 'sm:max-w-lg'}`}
             initial={{ y: 60, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 60, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             style={{ background: 'linear-gradient(180deg, #1f1a25, #141118)' }}
           >
-            <div className="mb-4 flex items-center justify-between gap-4">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-ash-600/40 px-5 py-3.5">
               <h2 className="h-display text-lg font-bold">{title}</h2>
-              <button onClick={onClose} className="rounded-full p-1.5 text-bone-dim hover:bg-ash-700 hover:text-bone" aria-label="Close">
-                <X size={18} />
+              <button onClick={onClose} className="-mr-1.5 rounded-full p-2 text-bone-dim hover:bg-ash-700 hover:text-bone" aria-label="Close">
+                <X size={20} />
               </button>
             </div>
-            {children}
+            <div
+              data-testid="sheet-body"
+              className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-4 ${footer ? 'pb-4' : 'pb-[calc(1.25rem+var(--safe-bottom))]'}`}
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+            >
+              {children}
+            </div>
+            {footer && (
+              <div className="shrink-0 border-t border-ash-600/40 bg-ash-900/95 px-5 pb-[calc(.75rem+var(--safe-bottom))] pt-3">{footer}</div>
+            )}
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 

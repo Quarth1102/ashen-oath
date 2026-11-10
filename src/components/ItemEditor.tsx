@@ -16,6 +16,9 @@ export type EditTarget =
 
 const KIND_TITLE = { habit: 'Habit', todo: 'To-do', goal: 'Goal quest' };
 
+// Only auto-focus the name field with a mouse/trackpad. On phones it pops the keyboard over the form.
+const hasFinePointer = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
+
 export default function ItemEditor({ target, onClose }: { target: EditTarget | null; onClose: () => void }) {
   const defs = useGame((s) => s.statDefs);
   const today = useToday();
@@ -88,8 +91,25 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
   };
 
   return (
-    <Sheet open={!!target} onClose={onClose} title={`${isNew ? 'New' : 'Edit'} ${KIND_TITLE[kind].toLowerCase()}`}>
+    <Sheet
+      open={!!target}
+      onClose={onClose}
+      title={`${isNew ? 'New' : 'Edit'} ${KIND_TITLE[kind].toLowerCase()}`}
+      footer={
+        <div className="flex gap-2">
+          {!isNew && (
+            confirmDel ? (
+              <button type="button" className="btn-danger" onClick={() => { deleteItem(kind, target!.item!.id); onClose(); }}>Really delete?</button>
+            ) : (
+              <button type="button" className="btn-ghost px-3 text-blood-light" onClick={() => setConfirmDel(true)} aria-label="Delete"><Trash2 size={16} /></button>
+            )
+          )}
+          <button type="submit" form="item-form" className="btn-primary flex-1" disabled={!valid}>{isNew ? 'Inscribe' : 'Save'}</button>
+        </div>
+      }
+    >
       <form
+        id="item-form"
         className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault();
@@ -110,7 +130,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
         )}
         <div className="space-y-2">
           <label className="label" htmlFor="item-title">Name</label>
-          <input id="item-title" className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'habit' ? 'e.g. Walk 30 minutes' : kind === 'todo' ? 'e.g. Book the dentist' : 'e.g. Run a half marathon'} />
+          <input id="item-title" className="input" autoFocus={hasFinePointer} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'habit' ? 'e.g. Walk 30 minutes' : kind === 'todo' ? 'e.g. Book the dentist' : 'e.g. Run a half marathon'} />
         </div>
 
         {kind === 'habit' && (
@@ -235,16 +255,6 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
           <textarea id="item-notes" className="input min-h-[70px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Why does this matter to you?" />
         </div>
 
-        <div className="flex gap-2 pt-1">
-          {!isNew && (
-            confirmDel ? (
-              <button type="button" className="btn-danger" onClick={() => { deleteItem(kind, target!.item!.id); onClose(); }}>Really delete?</button>
-            ) : (
-              <button type="button" className="btn-ghost px-3 text-blood-light" onClick={() => setConfirmDel(true)} aria-label="Delete"><Trash2 size={16} /></button>
-            )
-          )}
-          <button type="submit" className="btn-primary flex-1" disabled={!valid}>{isNew ? 'Inscribe' : 'Save'}</button>
-        </div>
       </form>
     </Sheet>
   );

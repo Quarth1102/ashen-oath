@@ -142,14 +142,18 @@ export default function Hero() {
         )}
       </Sheet>
 
-      <Sheet open={!!editLook} onClose={() => setEditLook(null)} title="Change your look">
+      <Sheet
+        open={!!editLook}
+        onClose={() => setEditLook(null)}
+        title="Change your look"
+        footer={<button className="btn-primary w-full" onClick={() => { if (editLook) updateHero({ appearance: editLook }); setEditLook(null); }}>Save look</button>}
+      >
         {editLook && (
           <div className="space-y-4">
-            <div className="flex justify-center rounded-xl bg-ash-900/80 py-2">
+            <div className="sticky top-0 z-10 -mx-1 flex justify-center rounded-xl bg-ash-900 py-2 shadow-lg">
               <HeroSprite look={{ ...look, appearance: editLook }} size={128} aura={cls?.aura} />
             </div>
             <AppearanceEditor value={editLook} onChange={setEditLook} />
-            <button className="btn-primary w-full" onClick={() => { updateHero({ appearance: editLook }); setEditLook(null); }}>Save look</button>
           </div>
         )}
       </Sheet>
