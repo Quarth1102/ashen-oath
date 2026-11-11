@@ -138,11 +138,11 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
   const bad = habit.polarity === 'bad';
   const due = isDueOn(habit, today);
   const optional = isOptional(habit);
-  const restDay = !bad && habit.frequency === 'daily' && !due && !optional;
+  const restDay = !bad && habit.frequency === 'daily' && !due && !optional && !habit.paused;
   const slipsToday = habit.slips[today] ?? 0;
 
   return (
-    <motion.div {...cardMotion} className={`panel relative flex items-center gap-3 p-3 ${restDay ? 'opacity-55' : ''}`} data-testid="habit-card">
+    <motion.div {...cardMotion} className={`panel relative flex items-center gap-3 p-3 ${restDay || habit.paused ? 'brightness-[.6] saturate-50' : ''}`} data-testid="habit-card">
       <Floats floats={floats} />
       {bad ? (
         <motion.button
@@ -198,6 +198,7 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
           )}
           {restDay && <span>rest day</span>}
           {optional && <span className="text-spectral/80">no penalty</span>}
+          {habit.paused && <span className="text-bone-dim">paused</span>}
           {bad && slipsToday > 0 && <span className="text-blood-light">slipped ×{slipsToday} today</span>}
           <Tags ids={habit.statIds} defs={defs} />
         </div>

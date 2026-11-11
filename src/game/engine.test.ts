@@ -504,3 +504,32 @@ describe('habits with no penalty days', () => {
     expect(s.hero!.totalXp).toBe(40);
   });
 });
+
+describe('paused habits & grouping', () => {
+  it('are never penalised or reviewed, and keep their streak', () => {
+    const s = withHero();
+    addHabit(s, { title: 'Run', difficulty: 'hard', paused: true, streak: 5, bestStreak: 5 });
+    addHabit(s, { title: 'Scroll', polarity: 'bad', paused: true, streak: 2 });
+    const r = E.processDay(s, ctx(at(NOON, 3)));
+    expect(r.state.pendingReview ?? null).toBeNull();
+    expect(r.state.hero!.hp).toBe(s.hero!.maxHp);
+    expect(r.state.habits[0].streak).toBe(5);
+    expect(r.state.habits[1].streak).toBe(2);
+  });
+
+  it('groups by first tagged stat in stat order, untagged last', async () => {
+    const { groupByStat } = await import('./groups');
+    const items = [
+      { id: 'a', statIds: ['wisdom', 'strength'] },
+      { id: 'b', statIds: [] },
+      { id: 'c', statIds: ['strength'] },
+      { id: 'd', statIds: ['gone', 'wisdom'] },
+    ];
+    const g = groupByStat(items, DEFAULT_STATS);
+    expect(g.map((x) => [x.key, x.items.map((i) => i.id)])).toEqual([
+      ['strength', ['c']],
+      ['wisdom', ['a', 'd']],
+      ['untagged', ['b']],
+    ]);
+  });
+});

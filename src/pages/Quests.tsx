@@ -6,6 +6,7 @@ import { useGame } from '../store/useGame';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty, PageHeader } from '../components/ui';
+import { GroupSection, StatGroups } from '../components/GroupSection';
 
 type Tab = 'habit' | 'todo' | 'goal';
 const ADD_LABEL: Record<Tab, string> = { habit: 'Add Habit', todo: 'Add To-do', goal: 'Add Goal' };
@@ -27,8 +28,10 @@ export default function Quests() {
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [showDone, setShowDone] = useState(false);
 
-  const good = habits.filter((h) => h.polarity === 'good');
-  const bad = habits.filter((h) => h.polarity === 'bad');
+  const defs = useGame((s) => s.statDefs);
+  // within each stat section: virtues first, then vices
+  const activeHabits = [...habits.filter((h) => !h.paused && h.polarity === 'good'), ...habits.filter((h) => !h.paused && h.polarity === 'bad')];
+  const pausedHabits = habits.filter((h) => h.paused);
   const openTodos = todos.filter((t) => !t.done).sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'));
   const doneTodos = todos.filter((t) => t.done);
   const activeGoals = goals.filter((g) => !g.done);
@@ -69,26 +72,18 @@ export default function Quests() {
           {tab === 'habit' && (
             <>
               {habits.length === 0 && <Empty icon="flame" title="No habits inscribed">Build virtues to grow stronger. Name your vices to resist them.</Empty>}
-              {good.length > 0 && (
-                <section className="space-y-2">
-                  <p className="label">Virtues</p>
-                  <AnimatePresence initial={false}>{good.map((h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />)}</AnimatePresence>
-                </section>
-              )}
-              {bad.length > 0 && (
-                <section className="space-y-2">
-                  <p className="label">Vices to resist</p>
-                  <AnimatePresence initial={false}>{bad.map((h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />)}</AnimatePresence>
-                </section>
+              <StatGroups scope="quests:habit" items={activeHabits} defs={defs} render={(h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />} />
+              {pausedHabits.length > 0 && (
+                <GroupSection id="quests:habit:paused" title="Paused" icon="moon" count={pausedHabits.length} muted>
+                  <AnimatePresence initial={false}>{pausedHabits.map((h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />)}</AnimatePresence>
+                </GroupSection>
               )}
             </>
           )}
           {tab === 'todo' && (
             <>
               {openTodos.length === 0 && <Empty icon="check" title="Nothing left undone">Add one-off tasks. They are worth XP once.</Empty>}
-              <div className="space-y-2">
-                <AnimatePresence initial={false}>{openTodos.map((t) => <TodoCard key={t.id} todo={t} onEdit={() => setEdit({ kind: 'todo', item: t })} />)}</AnimatePresence>
-              </div>
+              <StatGroups scope="quests:todo" items={openTodos} defs={defs} render={(t) => <TodoCard key={t.id} todo={t} onEdit={() => setEdit({ kind: 'todo', item: t })} />} />
               {doneTodos.length > 0 && (
                 <section className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -103,7 +98,7 @@ export default function Quests() {
           {tab === 'goal' && (
             <>
               {goals.length === 0 && <Empty icon="flag" title="No quests undertaken">Goals are long quests made of milestones. Finish one for big XP and a title.</Empty>}
-              <div className="space-y-2">{activeGoals.map((g) => <GoalCard key={g.id} goal={g} onEdit={() => setEdit({ kind: 'goal', item: g })} defaultOpen />)}</div>
+              <StatGroups scope="quests:goal" items={activeGoals} defs={defs} render={(g) => <GoalCard key={g.id} goal={g} onEdit={() => setEdit({ kind: 'goal', item: g })} defaultOpen />} />
               {doneGoals.length > 0 && (
                 <section className="space-y-2">
                   <p className="label">Completed sagas</p>

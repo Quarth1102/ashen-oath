@@ -39,6 +39,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
   const [msDraft, setMsDraft] = useState('');
   const [rewardTitle, setRewardTitle] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     if (!target) return;
@@ -57,6 +58,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
       setDays(h?.days ?? [0, 1, 2, 3, 4, 5, 6]);
       setPerWeek(h?.perWeek ?? 3);
       setPerDay(h?.perDay ?? 1);
+      setPaused(!!h?.paused);
     }
     if (target.kind === 'todo') setDue(target.item?.due ?? '');
     if (target.kind === 'goal') {
@@ -74,7 +76,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
     const common = { title: title.trim(), notes, difficulty, statIds };
     if (kind === 'habit') {
       const base = target.kind === 'habit' && target.item ? target.item : makeHabit({ title }, today);
-      saveHabit({ ...base, ...common, polarity, frequency, days, perWeek, perDay: frequency === 'weekly' ? 0 : perDay });
+      saveHabit({ ...base, ...common, polarity, frequency, days, perWeek, perDay: frequency === 'weekly' ? 0 : perDay, paused });
     } else if (kind === 'todo') {
       const base = target.kind === 'todo' && target.item ? target.item : makeTodo({ title }, today);
       saveTodo({ ...base, ...common, due: due || undefined });
@@ -242,7 +244,14 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
         <div className="space-y-2">
           <p className="label">Trains which stats?</p>
           <StatPicker defs={defs} value={statIds} onChange={setStatIds} />
-          <p className="text-[11px] text-bone-faint">XP is split across the stats you pick.</p>
+          <p className="text-[11px] text-bone-faint">
+            XP is split across the stats you pick.{' '}
+            {statIds.length ? (
+              <>Filed under <span style={{ color: defs.find((d) => d.id === statIds[0])?.color }}>{defs.find((d) => d.id === statIds[0])?.name}</span> (the first one you picked).</>
+            ) : (
+              'With none picked, it is filed under Untagged.'
+            )}
+          </p>
         </div>
 
         {(kind === 'todo' || kind === 'goal') && (
@@ -294,6 +303,16 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
               <input id="item-reward-title" className="input" value={rewardTitle} onChange={(e) => setRewardTitle(e.target.value)} placeholder="e.g. the Marathoner" />
             </div>
           </>
+        )}
+
+        {kind === 'habit' && !isNew && (
+          <label className="flex items-start gap-3 rounded-lg bg-ash-900/60 p-3">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[#e0a33a]" checked={paused} onChange={(e) => setPaused(e.target.checked)} data-testid="pause-toggle" />
+            <span>
+              <span className="block text-sm font-semibold">Pause this habit</span>
+              <span className="block text-xs text-bone-faint">Hidden from Camp and never penalised while paused. Its history and streak are kept, so you can resume anytime.</span>
+            </span>
+          </label>
         )}
 
         <div className="space-y-2">

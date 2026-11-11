@@ -71,6 +71,8 @@ export interface Habit {
   perWeek: number; // weekly habits
   /** how many times it can be logged per day: undefined/1 = once, 0 = unlimited */
   perDay?: number;
+  /** paused habits are hidden from Camp and never penalised; history and streaks are kept */
+  paused?: boolean;
   streak: number;
   bestStreak: number;
   /** the first log of each day: this is what counts for due days, streaks and penalties */
@@ -161,6 +163,8 @@ export interface Settings {
   penalty: PenaltyStrength;
   /** ask "did you do these?" before applying penalties for unmarked habits (default on) */
   reviewMissed?: boolean;
+  /** ids of collapsed list sections, e.g. "quests:habit:strength" */
+  collapsed?: string[];
   regionId: string | null; // null = follow highest unlocked region
 }
 

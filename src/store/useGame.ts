@@ -50,6 +50,7 @@ interface Store extends GameState {
   updateStat: (id: string, patch: Partial<Omit<StatDef, 'id'>>) => void;
   removeStat: (id: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
+  toggleCollapsed: (key: string) => void;
 
   exportData: () => string;
   importData: (json: string) => boolean;
@@ -113,6 +114,12 @@ export const useGame = create<Store>()(
       updateStat: (id, patch) => getState().run((s, c) => E.updateStat(s, id, patch, c)),
       removeStat: (id) => getState().run((s, c) => E.removeStat(s, id, c)),
       updateSettings: (patch) => setState((s) => ({ settings: { ...s.settings, ...patch } })),
+      toggleCollapsed: (key) =>
+        setState((s) => {
+          const c = new Set(s.settings.collapsed ?? []);
+          c.has(key) ? c.delete(key) : c.add(key);
+          return { settings: { ...s.settings, collapsed: [...c] } };
+        }),
 
       exportData: () => JSON.stringify(pickState(getState()), null, 2),
       importData: (json) => {

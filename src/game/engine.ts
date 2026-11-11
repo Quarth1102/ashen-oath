@@ -510,7 +510,7 @@ export function collectMissed(s: GameState, from: string, to: string): ReviewIte
   const items: ReviewItem[] = [];
   for (let d = from; d < to; d = addDays(d, 1)) {
     for (const h of s.habits) {
-      if (h.polarity !== 'good' || h.createdDay > d) continue;
+      if (h.polarity !== 'good' || h.paused || h.createdDay > d) continue;
       if (h.frequency === 'daily') {
         if (h.days.includes(weekday(d)) && !h.history[d]) {
           items.push({ key: `${h.id}@${d}`, habitId: h.id, day: d, title: h.title, difficulty: h.difficulty, kind: 'daily' });
@@ -555,7 +555,7 @@ function settleDays(tx: Tx, done: Set<string>) {
     days++;
     let dmg = 0;
     for (const h of s.habits) {
-      if (h.createdDay > d) continue;
+      if (h.createdDay > d || h.paused) continue;
       if (h.polarity === 'bad') {
         if (!h.slips[d]) {
           h.streak++;

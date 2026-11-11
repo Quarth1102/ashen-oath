@@ -11,6 +11,7 @@ import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty } from '../components/ui';
 import { Hud } from '../components/Chrome';
+import { StatGroups } from '../components/GroupSection';
 import { dailyLimit, isDueOn, isOptional, logsOn } from '../game/engine';
 import type { Habit } from '../game/types';
 import { activeStreak } from '../game/streaks';
@@ -38,7 +39,8 @@ export default function Camp() {
   const lastReward = [...events].reverse().find((e) => e.type === 'reward' || e.type === 'levelup');
 
   // everything relevant today: due virtues, no-penalty virtues, and vices
-  const todays = habits.filter((h) => h.polarity === 'bad' || isDueOn(h, today) || isOptional(h));
+  const defs = useGame((s) => s.statDefs);
+  const todays = habits.filter((h) => !h.paused && (h.polarity === 'bad' || isDueOn(h, today) || isOptional(h)));
   const due = todays.filter((h) => h.polarity === 'good' && isDueOn(h, today));
   const doneCount = due.filter((h) => h.history[today]).length;
   const goodDue = due.length;
@@ -116,11 +118,7 @@ export default function Camp() {
           <button className="btn-ghost px-3 py-2 text-xs" onClick={() => setEdit({ kind: 'habit' })}><Plus size={14} /> New</button>
         </div>
         {sorted.length ? (
-          <div className="space-y-2">
-            <AnimatePresence initial={false}>
-              {sorted.map((h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />)}
-            </AnimatePresence>
-          </div>
+          <StatGroups scope="camp" items={sorted} defs={defs} render={(h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />} />
         ) : doneToday ? (
           <Empty icon="sparkles" title="Every deed is done for today">Rest, wanderer. They return at dawn.</Empty>
         ) : (
