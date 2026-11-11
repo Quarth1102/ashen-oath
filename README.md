@@ -16,6 +16,7 @@ npm run build    # production build + PWA service worker in dist/
 ## How it plays
 
 - **Habits:** a *virtue* is done on set days or X times a week. A *vice* is something to resist: tap the skull when you give in.
+- **Repeatable habits:** set *Times per day* (1, 2, 3, 5 or unlimited) to log a habit more than once a day. Each log earns full XP and gold. On a set day, one log is what avoids the penalty and keeps the streak, so extra logs are pure bonus. For weekly habits, each log counts as a session.
 - **To-dos** are one-off tasks. **Goals** are quests made of milestones. Finishing a goal gives big XP and an optional title.
 - **XP** is split across the stats a deed is tagged with. Your hero and each stat level up on their own curves. Daily streaks add up to +50% XP.
 - **Classes are earned.** You start as a Wanderer, and at level 3 your class awakens from the stats you train most. A single dominant stat gives a pure class (Strength → Knight, Wisdom → Witch, and so on). Two close top stats give one of 15 hybrids, such as Strength + Discipline → Templar. Training everything evenly makes an Ashen Paragon. Your class is reassessed each new day and each level-up, adds a small XP bonus to its stats, and grants themed gear the first time you reach it. The thresholds are in `src/game/classes.ts`.

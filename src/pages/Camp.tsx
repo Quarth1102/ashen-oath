@@ -10,7 +10,7 @@ import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty } from '../components/ui';
 import { Hud } from '../components/Chrome';
-import { isDueOn } from '../game/engine';
+import { dailyLimit, isDueOn, logsOn } from '../game/engine';
 import { activeStreak } from '../game/streaks';
 
 function greeting(h: number) {
@@ -37,7 +37,8 @@ export default function Camp() {
   const due = habits.filter((h) => h.polarity === 'bad' || isDueOn(h, today));
   const doneCount = due.filter((h) => h.polarity === 'good' && h.history[today]).length;
   const goodDue = due.filter((h) => h.polarity === 'good').length;
-  const sorted = [...due].sort((a, b) => Number(!!a.history[today]) - Number(!!b.history[today]) || Number(a.polarity === 'bad') - Number(b.polarity === 'bad'));
+  const finished = (h: (typeof due)[number]) => Number(logsOn(h, today) >= dailyLimit(h));
+  const sorted = [...due].sort((a, b) => finished(a) - finished(b) || Number(a.polarity === 'bad') - Number(b.polarity === 'bad'));
   const openTodos = todos
     .filter((t) => !t.done || t.doneDay === today)
     .sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? '9999').localeCompare(b.due ?? '9999'))

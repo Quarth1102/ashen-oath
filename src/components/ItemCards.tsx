@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarClock, Check, ChevronDown, Flame, Skull, Undo2 } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, Flame, Repeat, Skull, Undo2 } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import type { Goal, Habit, StatDef, Todo } from '../game/types';
-import { DIFFICULTIES, habitXpPreview, isDueOn, weekCount } from '../game/engine';
+import { DIFFICULTIES, dailyLimit, habitXpPreview, isDueOn, logsOn, weekCount } from '../game/engine';
 import { BASE_XP } from '../game/xp';
 import { diffDays, parseDay } from '../game/dates';
 import { Bar, SkullRating, StatBadge } from './ui';
@@ -67,8 +67,11 @@ function Burst({ color }: { color: string }) {
   );
 }
 
-function CheckButton({ done, onClick, color = '#e0a33a', label }: { done: boolean; onClick: () => void; color?: string; label: string }) {
+function CheckButton({
+  done, onClick, color = '#e0a33a', label, count = 0,
+}: { done: boolean; onClick: () => void; color?: string; label: string; count?: number }) {
   const [burstKey, setBurstKey] = useState(0);
+  const partial = !done && count > 0;
   return (
     <motion.button
       type="button"
@@ -81,9 +84,14 @@ function CheckButton({ done, onClick, color = '#e0a33a', label }: { done: boolea
         onClick();
       }}
       className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border-2 transition-colors"
-      style={{ borderColor: done ? color : '#4a4052', background: done ? color : 'rgba(0,0,0,.35)' }}
+      style={{ borderColor: done || partial ? color : '#4a4052', background: done ? color : partial ? 'rgba(224,163,58,.18)' : 'rgba(0,0,0,.35)' }}
     >
-      <AnimatePresence>
+      <AnimatePresence mode="popLayout">
+        {partial && (
+          <motion.span key={count} initial={{ scale: 1.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 20 }} className="font-pixel text-base" style={{ color }}>
+            ×{count}
+          </motion.span>
+        )}
         {done && (
           <motion.span initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 20 }}>
             <Check size={22} strokeWidth={3} className="text-void" />
@@ -122,7 +130,11 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
   const { completeHabit, uncompleteHabit, slipHabit, undoSlip } = useGame.getState();
   const today = useToday();
   const { floats, push } = useFloats();
-  const done = !!habit.history[today];
+  const count = logsOn(habit, today);
+  const limit = dailyLimit(habit);
+  const repeatable = limit > 1;
+  // a once-a-day habit is "done" after one log; a repeatable one only when its limit is reached
+  const done = repeatable ? count >= limit : count > 0;
   const bad = habit.polarity === 'bad';
   const due = isDueOn(habit, today);
   const restDay = !bad && habit.frequency === 'daily' && !due;
@@ -150,10 +162,12 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
       ) : (
         <CheckButton
           done={done}
-          label={done ? `Undo ${habit.title}` : `Complete ${habit.title}`}
+          count={repeatable ? count : 0}
+          label={done ? (repeatable ? `${habit.title}: daily limit reached` : `Undo ${habit.title}`) : `${count ? 'Log again' : 'Complete'} ${habit.title}`}
           onClick={() => {
-            if (done) uncompleteHabit(habit.id);
-            else {
+            if (done) {
+              if (!repeatable) uncompleteHabit(habit.id); // repeatable ones undo via the undo button
+            } else {
               completeHabit(habit.id);
               push(lastRewardText());
             }
@@ -161,7 +175,7 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
         />
       )}
       <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left">
-        <p className={`truncate font-semibold ${done ? 'text-bone-faint line-through decoration-ember/60' : ''}`}>{habit.title}</p>
+        <p className={`truncate font-semibold ${done && !repeatable ? 'text-bone-faint line-through decoration-ember/60' : ''}`}>{habit.title}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-bone-faint">
           <SkullRating n={diffN(habit.difficulty)} />
           {habit.streak > 0 && (
@@ -171,6 +185,11 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
             </span>
           )}
           {habit.frequency === 'weekly' && !bad && <span>{weekCount(habit, today)}/{habit.perWeek} this week</span>}
+          {repeatable && (
+            <span className={`inline-flex items-center gap-0.5 ${count ? 'text-ember-light' : ''}`}>
+              <Repeat size={11} /> {limit === Infinity ? `×${count} today` : `${count}/${limit} today`}
+            </span>
+          )}
           {restDay && <span>rest day</span>}
           {bad && slipsToday > 0 && <span className="text-blood-light">slipped ×{slipsToday} today</span>}
           <Tags ids={habit.statIds} defs={defs} />
@@ -181,7 +200,16 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
           <Undo2 size={16} />
         </button>
       ) : (
-        !bad && <span className="shrink-0 font-pixel text-xs text-ember/80">+{habitXpPreview(habit)}</span>
+        !bad && (
+          <div className="flex shrink-0 items-center gap-1">
+            {repeatable && count > 0 && (
+              <button type="button" onClick={() => uncompleteHabit(habit.id)} className="rounded-lg p-2 text-bone-faint hover:bg-ash-700 hover:text-bone" aria-label={`Undo last log of ${habit.title}`}>
+                <Undo2 size={15} />
+              </button>
+            )}
+            <span className="font-pixel text-xs text-ember/80">+{habitXpPreview(habit)}</span>
+          </div>
+        )
       )}
     </motion.div>
   );

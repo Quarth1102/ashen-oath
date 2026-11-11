@@ -69,9 +69,14 @@ export interface Habit {
   frequency: 'daily' | 'weekly';
   days: number[]; // 0 = Sunday … 6 = Saturday (daily habits)
   perWeek: number; // weekly habits
+  /** how many times it can be logged per day: undefined/1 = once, 0 = unlimited */
+  perDay?: number;
   streak: number;
   bestStreak: number;
+  /** the first log of each day: this is what counts for due days, streaks and penalties */
   history: Record<string, HabitCompletion>;
+  /** additional logs beyond the first on a day (repeatable habits) */
+  extra?: Record<string, Reward[]>;
   slips: Record<string, number>;
   lastSlip?: { day: string; prevStreak: number; dmg: number };
   createdDay: string;

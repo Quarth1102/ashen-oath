@@ -420,3 +420,63 @@ describe('catch-up review', () => {
     expect(s.habits.find((h) => h.id === id)!.streak).toBe(3);
   });
 });
+
+describe('repeatable habits', () => {
+  it('logs up to the daily limit, each with a full reward, streak counted once', () => {
+    let s = withHero();
+    const id = addHabit(s, { title: 'Exercise 30 min', difficulty: 'medium', perDay: 3 });
+    for (let i = 0; i < 4; i++) s = E.completeHabit(s, id, ctx()).state; // 4th is over the limit
+    const h = s.habits[0];
+    expect(E.logsOn(h, '2026-11-11')).toBe(3);
+    expect(h.extra!['2026-11-11']).toHaveLength(2);
+    expect(h.streak).toBe(1);
+    expect(s.hero!.totalXp).toBe(60);
+    expect(s.counters.completions).toBe(3);
+  });
+
+  it('allows unlimited logs when perDay is 0', () => {
+    let s = withHero();
+    const id = addHabit(s, { title: 'Pushups set', difficulty: 'trivial', perDay: 0 });
+    for (let i = 0; i < 10; i++) s = E.completeHabit(s, id, ctx()).state;
+    expect(E.logsOn(s.habits[0], '2026-11-11')).toBe(10);
+  });
+
+  it('stays once-per-day by default', () => {
+    let s = withHero();
+    const id = addHabit(s, { title: 'Read' });
+    s = E.completeHabit(s, id, ctx()).state;
+    s = E.completeHabit(s, id, ctx()).state;
+    expect(E.logsOn(s.habits[0], '2026-11-11')).toBe(1);
+  });
+
+  it('undoes the most recent log first', () => {
+    let s = withHero();
+    const id = addHabit(s, { title: 'Exercise', difficulty: 'medium', perDay: 0 });
+    s = E.completeHabit(s, id, ctx()).state;
+    s = E.completeHabit(s, id, ctx()).state;
+    s = E.uncompleteHabit(s, id, ctx()).state;
+    expect(E.logsOn(s.habits[0], '2026-11-11')).toBe(1);
+    expect(s.habits[0].streak).toBe(1);
+    expect(s.hero!.totalXp).toBe(20);
+    s = E.uncompleteHabit(s, id, ctx()).state;
+    expect(E.logsOn(s.habits[0], '2026-11-11')).toBe(0);
+    expect(s.habits[0].streak).toBe(0);
+    expect(s.hero!.totalXp).toBe(0);
+  });
+
+  it('still penalises a set day with zero logs', () => {
+    const s = withHero();
+    s.settings.reviewMissed = false;
+    addHabit(s, { title: 'Exercise', difficulty: 'medium', perDay: 0 });
+    expect(E.processDay(s, ctx(at(NOON, 1))).state.hero!.hp).toBe(s.hero!.maxHp - 7);
+  });
+
+  it('counts repeat logs as weekly sessions', () => {
+    let s = withHero();
+    s.habits.push(E.makeHabit({ title: 'Gym', frequency: 'weekly', perWeek: 3, perDay: 0 }, '2026-11-09'));
+    const id = s.habits[0].id;
+    for (let i = 0; i < 3; i++) s = E.completeHabit(s, id, ctx()).state;
+    expect(E.weekCount(s.habits[0], '2026-11-11')).toBe(3);
+    expect(E.isDueOn(s.habits[0], '2026-11-12')).toBe(false); // week target met
+  });
+});

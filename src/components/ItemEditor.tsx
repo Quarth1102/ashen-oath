@@ -33,6 +33,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
   const [frequency, setFrequency] = useState<'daily' | 'weekly'>('daily');
   const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [perWeek, setPerWeek] = useState(3);
+  const [perDay, setPerDay] = useState(1);
   const [due, setDue] = useState('');
   const [milestones, setMilestones] = useState<Goal['milestones']>([]);
   const [msDraft, setMsDraft] = useState('');
@@ -55,6 +56,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
       setFrequency(h?.frequency ?? 'daily');
       setDays(h?.days ?? [0, 1, 2, 3, 4, 5, 6]);
       setPerWeek(h?.perWeek ?? 3);
+      setPerDay(h?.perDay ?? 1);
     }
     if (target.kind === 'todo') setDue(target.item?.due ?? '');
     if (target.kind === 'goal') {
@@ -72,7 +74,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
     const common = { title: title.trim(), notes, difficulty, statIds };
     if (kind === 'habit') {
       const base = target.kind === 'habit' && target.item ? target.item : makeHabit({ title }, today);
-      saveHabit({ ...base, ...common, polarity, frequency, days, perWeek });
+      saveHabit({ ...base, ...common, polarity, frequency, days, perWeek, perDay });
     } else if (kind === 'todo') {
       const base = target.kind === 'todo' && target.item ? target.item : makeTodo({ title }, today);
       saveTodo({ ...base, ...common, due: due || undefined });
@@ -177,6 +179,20 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
                     <span className="w-24 text-right font-pixel text-sm">{perWeek}× / week</span>
                   </div>
                 )}
+                <div className="space-y-2 pt-1">
+                  <p className="label">Times per day</p>
+                  <Segmented
+                    layoutId="editor-perday"
+                    value={perDay}
+                    onChange={setPerDay}
+                    options={[1, 2, 3, 5, 0].map((n) => ({ value: n, label: n === 0 ? '∞' : `${n}×` }))}
+                  />
+                  <p className="text-[11px] text-bone-faint">
+                    {perDay === 1
+                      ? 'Log it once a day.'
+                      : `Log it ${perDay === 0 ? 'as many times as you like' : `up to ${perDay} times`} a day, and every log earns XP. Good for things like "30 min of exercise" on a big day. ${frequency === 'daily' ? 'Penalties only apply on a set day when you log it zero times.' : 'Each log counts as a session toward your weekly goal.'}`}
+                  </p>
+                </div>
               </>
             )}
             {polarity === 'bad' && <p className="text-xs text-bone-faint">Tap the skull whenever you give in. It costs HP. Every clean day adds to your streak.</p>}

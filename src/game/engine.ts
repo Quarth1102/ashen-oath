@@ -243,10 +243,21 @@ export function today(s: GameState, now: Date) {
   return dayKey(now, s.settings.resetHour);
 }
 
+/** How many times a habit was logged on a day (first log + repeats). */
+export function logsOn(h: Habit, day: string): number {
+  return (h.history[day] ? 1 : 0) + (h.extra?.[day]?.length ?? 0);
+}
+
+/** Daily log limit: 1 by default, Infinity when unlimited (perDay = 0). */
+export function dailyLimit(h: Habit): number {
+  return h.perDay === 0 ? Infinity : Math.max(1, h.perDay ?? 1);
+}
+
+/** Sessions logged this week up to and including `day` (repeat logs count as sessions). */
 export function weekCount(h: Habit, day: string): number {
   const start = weekStart(day);
   let n = 0;
-  for (let d = start; d <= day; d = addDays(d, 1)) if (h.history[d]) n++;
+  for (let d = start; d <= day; d = addDays(d, 1)) n += logsOn(h, d);
   return n;
 }
 
@@ -338,7 +349,17 @@ export function makeGoal(p: Partial<Goal> & { title: string }, day: string): Goa
 export function completeHabit(state: GameState, id: string, ctx: Ctx): Result {
   const tx = new Tx(state, ctx);
   const h = findHabit(tx.s, id);
-  if (!h || h.polarity !== 'good' || h.history[tx.today]) return tx.done();
+  if (!h || h.polarity !== 'good') return tx.done();
+  if (h.history[tx.today]) {
+    // repeat log: full reward, but streaks and penalties only care about the first log
+    if (logsOn(h, tx.today) >= dailyLimit(h)) return tx.done();
+    const mult = h.frequency === 'daily' ? streakMultiplier(Math.max(0, h.streak - 1)) : 1;
+    const n = logsOn(h, tx.today) + 1;
+    const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, `${h.title} ×${n}`, regenFor(h.difficulty));
+    ((h.extra ??= {})[tx.today] ??= []).push(reward);
+    checkAchievements(tx);
+    return tx.done();
+  }
   const prevStreak = h.streak;
   const prevBest = h.bestStreak;
   const mult = h.frequency === 'daily' ? streakMultiplier(h.streak) : 1;
@@ -357,6 +378,13 @@ export function uncompleteHabit(state: GameState, id: string, ctx: Ctx): Result 
   const h = findHabit(tx.s, id);
   const c = h?.history[tx.today];
   if (!h || !c) return tx.done();
+  // undo the most recent log first
+  const extras = h.extra?.[tx.today];
+  if (extras?.length) {
+    revokeReward(tx, extras.pop()!);
+    if (!extras.length) delete h.extra![tx.today];
+    return tx.done();
+  }
   revokeReward(tx, c);
   h.streak = c.prevStreak;
   h.bestStreak = c.prevBest;
