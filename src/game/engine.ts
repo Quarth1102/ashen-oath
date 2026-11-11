@@ -248,8 +248,9 @@ export function logsOn(h: Habit, day: string): number {
   return (h.history[day] ? 1 : 0) + (h.extra?.[day]?.length ?? 0);
 }
 
-/** Daily log limit: 1 by default, Infinity when unlimited (perDay = 0). */
+/** Daily log limit: 1 by default, Infinity when unlimited (perDay = 0). Weekly habits are always unlimited. */
 export function dailyLimit(h: Habit): number {
+  if (h.frequency === 'weekly') return Infinity;
   return h.perDay === 0 ? Infinity : Math.max(1, h.perDay ?? 1);
 }
 

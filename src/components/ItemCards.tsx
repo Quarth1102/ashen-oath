@@ -184,8 +184,13 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
               {bad ? ' clean' : habit.frequency === 'weekly' ? 'w' : 'd'}
             </span>
           )}
-          {habit.frequency === 'weekly' && !bad && <span>{weekCount(habit, today)}/{habit.perWeek} this week</span>}
-          {repeatable && (
+          {habit.frequency === 'weekly' && !bad && (
+            <span className={`inline-flex items-center gap-0.5 ${weekCount(habit, today) >= habit.perWeek ? 'text-ember-light' : ''}`}>
+              {weekCount(habit, today) >= habit.perWeek && <Check size={11} strokeWidth={3} />}
+              {weekCount(habit, today)}/{habit.perWeek} this week
+            </span>
+          )}
+          {repeatable && habit.frequency === 'daily' && (
             <span className={`inline-flex items-center gap-0.5 ${count ? 'text-ember-light' : ''}`}>
               <Repeat size={11} /> {limit === Infinity ? `×${count} today` : `${count}/${limit} today`}
             </span>

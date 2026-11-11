@@ -480,3 +480,14 @@ describe('repeatable habits', () => {
     expect(E.isDueOn(s.habits[0], '2026-11-12')).toBe(false); // week target met
   });
 });
+
+describe('weekly habits log freely', () => {
+  it('allows several sessions a day even if perDay was left at 1', () => {
+    let s = withHero();
+    s.habits.push(E.makeHabit({ title: 'Gym', frequency: 'weekly', perWeek: 3, perDay: 1 }, '2026-11-09'));
+    const id = s.habits[0].id;
+    s = E.completeHabit(s, id, ctx()).state;
+    s = E.completeHabit(s, id, ctx()).state;
+    expect(E.weekCount(s.habits[0], '2026-11-11')).toBe(2);
+  });
+});

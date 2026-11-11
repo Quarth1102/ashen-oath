@@ -74,7 +74,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
     const common = { title: title.trim(), notes, difficulty, statIds };
     if (kind === 'habit') {
       const base = target.kind === 'habit' && target.item ? target.item : makeHabit({ title }, today);
-      saveHabit({ ...base, ...common, polarity, frequency, days, perWeek, perDay });
+      saveHabit({ ...base, ...common, polarity, frequency, days, perWeek, perDay: frequency === 'weekly' ? 0 : perDay });
     } else if (kind === 'todo') {
       const base = target.kind === 'todo' && target.item ? target.item : makeTodo({ title }, today);
       saveTodo({ ...base, ...common, due: due || undefined });
@@ -153,46 +153,76 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
                   value={frequency}
                   onChange={setFrequency}
                   options={[
-                    { value: 'daily', label: 'On set days' },
-                    { value: 'weekly', label: 'X times a week' },
+                    { value: 'daily', label: 'Daily' },
+                    { value: 'weekly', label: 'Weekly' },
                   ]}
                 />
-                {frequency === 'daily' ? (
-                  <div className="flex justify-between gap-1">
-                    {WEEKDAY_SHORT.map((d, i) => {
-                      const on = days.includes(i);
-                      return (
-                        <button
-                          type="button"
-                          key={d}
-                          onClick={() => setDays(on ? days.filter((x) => x !== i) : [...days, i].sort())}
-                          className={`h-10 flex-1 rounded-lg border text-xs font-bold transition ${on ? 'border-ember bg-ember/90 text-void' : 'border-ash-600 bg-ash-900 text-bone-faint'}`}
-                        >
-                          {d}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <input type="range" min={1} max={7} value={perWeek} onChange={(e) => setPerWeek(+e.target.value)} className="flex-1 accent-[#e0a33a]" />
-                    <span className="w-24 text-right font-pixel text-sm">{perWeek}× / week</span>
-                  </div>
-                )}
-                <div className="space-y-2 pt-1">
-                  <p className="label">Times per day</p>
-                  <Segmented
-                    layoutId="editor-perday"
-                    value={perDay}
-                    onChange={setPerDay}
-                    options={[1, 2, 3, 5, 0].map((n) => ({ value: n, label: n === 0 ? '∞' : `${n}×` }))}
-                  />
-                  <p className="text-[11px] text-bone-faint">
-                    {perDay === 1
-                      ? 'Log it once a day.'
-                      : `Log it ${perDay === 0 ? 'as many times as you like' : `up to ${perDay} times`} a day, and every log earns XP. Good for things like "30 min of exercise" on a big day. ${frequency === 'daily' ? 'Penalties only apply on a set day when you log it zero times.' : 'Each log counts as a session toward your weekly goal.'}`}
-                  </p>
-                </div>
+                <AnimatePresence mode="wait" initial={false}>
+                  {frequency === 'daily' ? (
+                    <motion.div key="daily" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }} className="space-y-4">
+                      <div className="space-y-2">
+                        <p className="label">Penalty days</p>
+                        <div className="flex justify-between gap-1">
+                          {WEEKDAY_SHORT.map((d, i) => {
+                            const on = days.includes(i);
+                            return (
+                              <button
+                                type="button"
+                                key={d}
+                                onClick={() => setDays(on ? days.filter((x) => x !== i) : [...days, i].sort())}
+                                aria-pressed={on}
+                                className={`h-10 flex-1 rounded-lg border text-xs font-bold transition ${on ? 'border-ember bg-ember/90 text-void' : 'border-ash-600 bg-ash-900 text-bone-faint'}`}
+                              >
+                                {d}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[11px] text-bone-faint">
+                          {days.length === 0
+                            ? 'Pick at least one day.'
+                            : days.length === 7
+                              ? 'Due every day. Skip a day and you lose HP.'
+                              : `Due on ${days.map((i) => WEEKDAY_SHORT[i]).join(', ')}. Skipping one of these days costs HP. Other days are rest days.`}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="label">Times per day</p>
+                        <Segmented
+                          layoutId="editor-perday"
+                          value={perDay}
+                          onChange={setPerDay}
+                          options={[1, 2, 3, 5, 0].map((n) => ({ value: n, label: n === 0 ? '∞' : `${n}×` }))}
+                        />
+                        <p className="text-[11px] text-bone-faint">
+                          {perDay === 1
+                            ? 'Log it once a day.'
+                            : `Log it ${perDay === 0 ? 'as many times as you like' : `up to ${perDay} times`} a day, and every log earns XP. Good for things like "30 min of exercise" on a big day. One log on a due day is enough to avoid the penalty.`}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.div key="weekly" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }} className="space-y-2">
+                      <p className="label">Times per week</p>
+                      <div className="flex justify-between gap-1">
+                        {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                          <button
+                            type="button"
+                            key={n}
+                            onClick={() => setPerWeek(n)}
+                            aria-pressed={perWeek === n}
+                            className={`h-10 flex-1 rounded-lg border text-sm font-bold transition ${perWeek === n ? 'border-ember bg-ember/90 text-void' : 'border-ash-600 bg-ash-900 text-bone-faint'}`}
+                          >
+                            {n}×
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-bone-faint">
+                        Do it {perWeek} time{perWeek > 1 ? 's' : ''} any day of the week (Monday to Sunday). Every log counts as a session and earns XP, including several in one day. If you end the week short, each missing session costs HP.
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </>
             )}
             {polarity === 'bad' && <p className="text-xs text-bone-faint">Tap the skull whenever you give in. It costs HP. Every clean day adds to your streak.</p>}
