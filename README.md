@@ -23,6 +23,7 @@ npm run build    # production build + PWA service worker in dist/
 - **Gold** is half the XP you earn. Spend it in the Market on gear, which changes your sprite and adds a bonus to one stat's XP. Every deed has a 5% chance to drop a loot chest.
 - **Penalties:** missed daily habits and giving in to vices cost HP. At 0 HP you *fall*: you lose 10% of your gold and the XP toward your next level, but never a level or a stat. You can turn penalties off in Settings.
 - **Catch-up check-in:** when a new day starts with habits left unmarked, the app asks "Did you do these?" before applying any penalty. Ticked habits are credited on the day they belonged to, so you get the XP and keep the streak. Only the unticked ones cost HP. Weekly habits ask how many more sessions you did. You can switch this off in Settings.
+- **Your hero lives at camp:** the Camp scene shows your hero doing something that fits your local time of day. They sleep by the embers late at night; at dawn, midday and evening they sit by the campfire with their tent; during the day they wander, fish at a pond or keep watch. The pick is random but stays the same for about 90 minutes. Add `?activity=camp` (or `fish`, `wander`, `sleep`, `watch`) to the URL to preview one. The schedule is in `src/game/activity.ts`.
 - **Regions** unlock as you level: Ashen Hamlet (1), Gloomwood (5), Drowned Marsh (10), Bone Cathedral (20), Obsidian Peaks (35).
 
 All data stays on your device (IndexedDB). Use Settings → Export to make a backup.

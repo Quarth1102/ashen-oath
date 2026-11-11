@@ -77,14 +77,27 @@ function drawCloakBack(g: Grid, c: GearLook, oy: number) {
   }
 }
 
-function drawLegs(g: Grid) {
-  g.srect(12, 23, 3, 5, PANTS);
-  g.srect(17, 23, 3, 5, PANTS);
+/** lift: which leg is raised mid-step (walk cycle), or none */
+function drawLegs(g: Grid, lift: 'left' | 'right' | 'none' = 'none') {
+  const leg = (x: number, bx: number, up: number) => {
+    g.srect(x, 23, 3, 5 - up, PANTS);
+    g.srect(bx, 28 - up, 4, 3, BOOTS);
+    g.rect(bx, 28 - up, 4, 1, shade(BOOTS, 0.15));
+  };
   g.rect(15, 23, 2, 1, PANTS);
-  g.srect(11, 28, 4, 3, BOOTS);
-  g.srect(17, 28, 4, 3, BOOTS);
-  g.rect(11, 28, 4, 1, shade(BOOTS, 0.15));
-  g.rect(17, 28, 4, 1, shade(BOOTS, 0.15));
+  leg(12, 11, lift === 'left' ? 1 : 0);
+  leg(17, 17, lift === 'right' ? 1 : 0);
+}
+
+/** cross-legged, seen from the front */
+function drawSeatedLegs(g: Grid) {
+  g.rect(11, 27, 10, 1, PANTS);
+  g.srect(9, 28, 14, 2, PANTS);
+  g.rect(15, 28, 2, 1, shade(PANTS, -0.3));
+  g.srect(7, 28, 3, 3, BOOTS);
+  g.srect(22, 28, 3, 3, BOOTS);
+  g.rect(7, 28, 3, 1, shade(BOOTS, 0.15));
+  g.rect(22, 28, 3, 1, shade(BOOTS, 0.15));
 }
 
 function drawBelt(g: Grid, oy: number, buckle: string) {
@@ -92,7 +105,7 @@ function drawBelt(g: Grid, oy: number, buckle: string) {
   g.rect(15, 22 + oy, 2, 1, buckle);
 }
 
-function drawArmor(g: Grid, a: GearLook | undefined, oy: number): string {
+function drawArmor(g: Grid, a: GearLook | undefined, oy: number, seated = false): string {
   const y = 15 + oy;
   if (!a) {
     g.srect(11, y, 10, 8, TUNIC);
@@ -127,11 +140,18 @@ function drawArmor(g: Grid, a: GearLook | undefined, oy: number): string {
     }
     case 'robe': {
       g.srect(11, y, 10, 8, c);
-      // skirt flares over legs
-      g.rect(11, 23, 10, 3, c);
-      g.rect(10, 26, 12, 4, c);
-      g.rect(21, 23, 1, 7, shade(c, -0.25));
-      g.rect(10, 29, 12, 1, a.trim);
+      if (seated) {
+        // skirt pools around crossed legs
+        g.rect(8, 27, 16, 3, c);
+        g.rect(23, 27, 1, 3, shade(c, -0.25));
+        g.rect(8, 29, 16, 1, a.trim);
+      } else {
+        // skirt flares over legs
+        g.rect(11, 23, 10, 3, c);
+        g.rect(10, 26, 12, 4, c);
+        g.rect(21, 23, 1, 7, shade(c, -0.25));
+        g.rect(10, 29, 12, 1, a.trim);
+      }
       g.rect(15, y + 1, 2, 29 - y - 1, shade(c, -0.2));
       g.rect(15, y + 1, 1, 29 - y - 1, shade(a.trim, -0.2));
       g.rect(13, y, 6, 1, a.trim);
@@ -175,7 +195,7 @@ function drawCloakCollar(g: Grid, c: GearLook, oy: number) {
   g.set(18, 15 + oy, c.trim);
 }
 
-function drawHead(g: Grid, ap: Appearance, oy: number) {
+function drawHead(g: Grid, ap: Appearance, oy: number, closed = false) {
   const s = ap.skin;
   g.rect(14, 14 + oy, 4, 1, shade(s, -0.2));
   g.rect(12, 6 + oy, 8, 8, s);
@@ -188,15 +208,20 @@ function drawHead(g: Grid, ap: Appearance, oy: number) {
   const brow = ap.hairStyle === 'bald' ? shade(s, -0.4) : shade(ap.hairColor, -0.1);
   g.rect(13, 9 + oy, 2, 1, brow);
   g.rect(17, 9 + oy, 2, 1, brow);
-  if (!glow) {
-    g.set(13, 10 + oy, '#e8dfcf');
-    g.set(18, 10 + oy, '#e8dfcf');
-  }
-  g.set(14, 10 + oy, ap.eyeColor);
-  g.set(17, 10 + oy, ap.eyeColor);
-  if (glow) {
-    g.set(13, 10 + oy, shade(ap.eyeColor, -0.3));
-    g.set(18, 10 + oy, shade(ap.eyeColor, -0.3));
+  if (closed) {
+    g.rect(13, 10 + oy, 2, 1, shade(s, -0.4));
+    g.rect(17, 10 + oy, 2, 1, shade(s, -0.4));
+  } else {
+    if (!glow) {
+      g.set(13, 10 + oy, '#e8dfcf');
+      g.set(18, 10 + oy, '#e8dfcf');
+    }
+    g.set(14, 10 + oy, ap.eyeColor);
+    g.set(17, 10 + oy, ap.eyeColor);
+    if (glow) {
+      g.set(13, 10 + oy, shade(ap.eyeColor, -0.3));
+      g.set(18, 10 + oy, shade(ap.eyeColor, -0.3));
+    }
   }
   g.rect(15, 12 + oy, 2, 1, shade(s, -0.32));
   const scar = mix(s, '#7a1f2b', 0.65);
@@ -393,44 +418,78 @@ function drawWeapon(g: Grid, w: GearLook, oy: number) {
   }
 }
 
-export function renderHeroGrid(look: SpriteLook, frame: 0 | 1 = 0): Cell[] {
+/** Poses for the camp scene. */
+export type Pose = 'idle' | 'walk' | 'sit' | 'fish' | 'sleep';
+
+export const POSE_FRAMES: Record<Pose, number> = { idle: 2, walk: 4, sit: 2, fish: 2, sleep: 2 };
+
+/** Fishing rod held in the right hand, angling up and out to the right. */
+function drawRod(g: Grid, handY: number, dip: number) {
+  const wood = '#6b4a2a';
+  const x0 = 23, y0 = handY, x1 = 31, y1 = 9 + dip;
+  const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(x0 + ((x1 - x0) * i) / steps);
+    const y = Math.round(y0 + ((y1 - y0) * i) / steps);
+    g.set(x, y, i > steps * 0.7 ? shade(wood, 0.25) : wood);
+  }
+  g.set(x0 + 1, y0, '#2a1a14'); // reel
+}
+
+export function renderHeroGrid(look: SpriteLook, frame = 0, pose: Pose = 'idle'): Cell[] {
   const g = new Grid();
-  const oy = frame;
+  const seated = pose === 'sit' || pose === 'fish';
+  // how far the upper body sits below its standing position
+  const oy = seated ? 4 + (frame % 2) : pose === 'walk' ? [0, 1, 0, 1][frame % 4] : frame % 2;
   const ap = look.appearance;
   const eq = look.equipped;
   const helm = lookOf(eq, 'helm');
   const armor = lookOf(eq, 'armor');
   const cloak = lookOf(eq, 'cloak');
-  const weapon = lookOf(eq, 'weapon');
+  // weapons are put down while resting; fishing swaps in a rod
+  const armed = pose === 'idle' || pose === 'walk';
+  const weapon = armed ? lookOf(eq, 'weapon') : undefined;
 
-  if (cloak) drawCloakBack(g, cloak, oy);
+  const sleeping = pose === 'sleep';
+  if (cloak && !sleeping) drawCloakBack(g, cloak, oy);
   if (weapon && (weapon.style === 'staff' || weapon.style === 'scythe')) drawWeapon(g, weapon, oy); // long shafts sit behind the hand
-  drawLegs(g);
-  const sleeve = drawArmor(g, armor, oy);
-  drawArms(g, sleeve, armor, ap.skin, oy, !!weapon);
-  if (cloak) drawCloakCollar(g, cloak, oy);
-  drawHead(g, ap, oy);
+  if (seated) drawSeatedLegs(g);
+  else drawLegs(g, pose === 'walk' ? (['left', 'none', 'right', 'none'] as const)[frame % 4] : 'none');
+  const sleeve = drawArmor(g, armor, oy, seated);
+  drawArms(g, sleeve, armor, ap.skin, oy, !!weapon || pose === 'fish');
+  if (cloak && !sleeping) drawCloakCollar(g, cloak, oy);
+  if (sleeping) {
+    // tucked in under a blanket up to the chin
+    const wool = '#7a1f2b';
+    g.rect(9, 15 + oy, 14, 16 - oy, wool);
+    g.rect(9, 15 + oy, 14, 2, '#b5ab9b'); // folded-over top
+    for (let y = 19 + oy; y < 31; y += 4) g.rect(9, y, 14, 1, shade(wool, -0.25));
+    g.rect(22, 17 + oy, 1, 14 - oy, shade(wool, -0.3));
+  }
+  drawHead(g, ap, oy, sleeping);
   const hairHidden = helm && (helm.style === 'greathelm' || helm.style === 'hood');
   if (!hairHidden) drawHair(g, ap, oy);
-  if (helm) drawHelm(g, helm, ap, oy);
+  if (helm && pose !== 'sleep') drawHelm(g, helm, ap, oy);
   if (weapon && weapon.style !== 'staff' && weapon.style !== 'scythe') drawWeapon(g, weapon, oy);
+  if (pose === 'fish') drawRod(g, 22 + oy, frame % 2);
   g.outline();
   return g.px;
 }
 
 const sheetCache = new Map<string, string>();
 
-/** 2-frame horizontal sprite sheet (64×32) as a data URL. */
-export function heroSheet(look: SpriteLook): string {
-  const key = JSON.stringify(look);
+/** Horizontal sprite sheet (POSE_FRAMES[pose] frames of 32×32) as a data URL. */
+export function heroSheet(look: SpriteLook, pose: Pose = 'idle'): string {
+  const key = pose + JSON.stringify(look);
   const hit = sheetCache.get(key);
   if (hit) return hit;
   const canvas = document.createElement('canvas');
-  canvas.width = SPRITE * 2;
+  const frames = POSE_FRAMES[pose];
+  canvas.width = SPRITE * frames;
   canvas.height = SPRITE;
   const ctx = canvas.getContext('2d')!;
-  ([0, 1] as const).forEach((f) => {
-    const px = renderHeroGrid(look, f);
+  Array.from({ length: frames }, (_, f) => f).forEach((f) => {
+    const px = renderHeroGrid(look, f, pose);
     for (let i = 0; i < px.length; i++) {
       const c = px[i];
       if (!c) continue;

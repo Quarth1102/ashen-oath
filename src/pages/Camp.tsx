@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Flame, Plus } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { useHeroClass, useHeroLook, useRegion, useToday } from '../hooks';
+import { useActivity, useHeroClass, useHeroLook, useRegion, useToday } from '../hooks';
 import Landscape from '../components/Landscape';
-import HeroSprite from '../components/HeroSprite';
+import HeroScene from '../components/HeroScene';
+import { activityCaption } from '../game/activity';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty } from '../components/ui';
@@ -28,6 +29,7 @@ export default function Camp() {
   const goals = useGame((s) => s.goals);
   const activity = useGame((s) => s.dayActivity);
   const look = useHeroLook()!;
+  const doing = useActivity();
   const region = useRegion();
   const today = useToday();
   const [edit, setEdit] = useState<EditTarget | null>(null);
@@ -51,17 +53,18 @@ export default function Camp() {
     <div className="space-y-5">
       <div className="relative -mx-4 -mt-4 md:mx-0 md:mt-0">
         <Landscape region={region} className="h-[46vh] min-h-[300px] w-full md:rounded-2xl md:ring-1 md:ring-ash-600/50">
-          {(g, s) => (
-            <div className="absolute left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ bottom: g - 4 * s }}>
-              <HeroSprite look={look} size={Math.round(32 * s * 1.15)} aura={cls.aura} celebrate={lastReward?.id} />
-            </div>
-          )}
+          {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={lastReward?.id} />}
         </Landscape>
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 md:p-5">
           <div className="pr-3">
             <p className="label text-bone-dim">{region.name}</p>
             <p className="h-display mt-1 text-xl font-bold drop-shadow-[0_2px_6px_rgba(0,0,0,.9)]">{greeting(new Date().getHours())}, {hero.name}.</p>
             <p className="text-xs text-ember-light/90 drop-shadow">{hero.name} {hero.title}</p>
+            <AnimatePresence mode="wait">
+              <motion.p key={doing} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-1 text-xs italic text-bone-dim drop-shadow" data-testid="activity-caption">
+                {activityCaption(doing, hero.name)}
+              </motion.p>
+            </AnimatePresence>
           </div>
           <motion.div
             className="pointer-events-auto flex flex-col items-center rounded-xl bg-black/40 px-3 py-2 ring-1 ring-ember/30 backdrop-blur-sm"

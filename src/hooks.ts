@@ -6,6 +6,7 @@ import type { SpriteLook } from './art/sprite';
 import type { Hero } from './game/types';
 import { resolveClass } from './game/classes';
 import type { ClassInfo } from './data/classes';
+import { ACTIVITIES, activityAt, type Activity } from './game/activity';
 
 export function useNow(intervalMs = 60_000) {
   const [now, setNow] = useState(() => new Date());
@@ -64,4 +65,16 @@ export function useHeroClass(): ClassInfo {
   const classId = useGame((s) => s.hero?.classId ?? 'wanderer');
   const defs = useGame((s) => s.statDefs);
   return useMemo(() => resolveClass(classId, defs), [classId, defs]);
+}
+
+/**
+ * What the hero is doing right now (time-of-day based, stable for ~90 minutes).
+ * `?activity=fish` in the URL forces one, for previewing.
+ */
+export function useActivity(): Activity {
+  const now = useNow(60_000);
+  const seed = useGame((s) => s.hero?.name ?? '');
+  const forced = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('activity') : null;
+  if (forced && (ACTIVITIES as string[]).includes(forced)) return forced as Activity;
+  return activityAt(now, seed);
 }

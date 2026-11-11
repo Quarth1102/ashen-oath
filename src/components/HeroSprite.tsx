@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { heroSheet, type SpriteLook } from '../art/sprite';
+import { POSE_FRAMES, heroSheet, type Pose, type SpriteLook } from '../art/sprite';
 import { rgba } from '../art/color';
 
 interface Props {
@@ -13,10 +13,16 @@ interface Props {
   celebrate?: number | string;
   shadow?: boolean;
   className?: string;
+  pose?: Pose;
+  /** mirror horizontally (face left) */
+  flip?: boolean;
 }
 
-export default function HeroSprite({ look, size = 128, aura, idle = true, celebrate, shadow = true, className = '' }: Props) {
-  const sheet = useMemo(() => heroSheet(look), [look]);
+const POSE_SPEED: Record<Pose, number> = { idle: 1.3, walk: 0.6, sit: 2.2, fish: 2.6, sleep: 3.2 };
+
+export default function HeroSprite({ look, size = 128, aura, idle = true, celebrate, shadow = true, className = '', pose = 'idle', flip = false }: Props) {
+  const sheet = useMemo(() => heroSheet(look, pose), [look, pose]);
+  const frames = POSE_FRAMES[pose];
   return (
     <div className={`relative ${className}`} style={{ width: size, height: size }}>
       {aura && (
@@ -28,7 +34,7 @@ export default function HeroSprite({ look, size = 128, aura, idle = true, celebr
       {shadow && (
         <div
           className="absolute left-1/2 -translate-x-1/2 rounded-[50%] bg-black/60"
-          style={{ width: size * 0.42, height: size * 0.07, bottom: size * 0.02 }}
+          style={{ width: size * (pose === 'sit' || pose === 'fish' ? 0.62 : 0.42), height: size * 0.07, bottom: size * 0.02 }}
         />
       )}
       <motion.div
@@ -36,9 +42,19 @@ export default function HeroSprite({ look, size = 128, aura, idle = true, celebr
         initial={celebrate !== undefined ? { y: 0 } : false}
         animate={celebrate !== undefined ? { y: [0, -size * 0.22, 0, -size * 0.08, 0] } : undefined}
         transition={{ duration: 0.7, ease: 'easeOut' }}
-        className={`pixelated absolute inset-0 ${idle ? 'sprite-idle' : ''}`}
-        style={{ backgroundImage: `url(${sheet})`, backgroundSize: '200% 100%', backgroundRepeat: 'no-repeat' }}
-      />
+        className="absolute inset-0"
+      >
+        <div
+          className={`pixelated absolute inset-0 ${idle ? 'sprite-anim' : ''}`}
+          style={{
+            backgroundImage: `url(${sheet})`,
+            backgroundSize: `${frames * 100}% 100%`,
+            backgroundRepeat: 'no-repeat',
+            transform: flip ? 'scaleX(-1)' : undefined,
+            animation: idle ? `sprite-${frames} ${POSE_SPEED[pose]}s steps(${frames}) infinite` : undefined,
+          }}
+        />
+      </motion.div>
     </div>
   );
 }
