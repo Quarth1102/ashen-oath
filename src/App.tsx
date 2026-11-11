@@ -4,6 +4,7 @@ import { useGame } from './store/useGame';
 import { useDailyReset } from './hooks';
 import { BottomNav, Hud, SideRail } from './components/Chrome';
 import EventLayer from './components/EventLayer';
+import ReviewModal from './components/ReviewModal';
 import Onboarding from './pages/Onboarding';
 import Camp from './pages/Camp';
 import Quests from './pages/Quests';
@@ -63,6 +64,7 @@ export default function App() {
         </div>
       </div>
       <BottomNav />
+      <ReviewModal />
       <EventLayer />
     </div>
   );

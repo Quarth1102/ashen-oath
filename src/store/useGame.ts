@@ -39,6 +39,7 @@ interface Store extends GameState {
   clearDoneTodos: () => void;
 
   processDay: () => void;
+  resolveReview: (done: string[]) => void;
 
   buy: (itemId: string) => void;
   equip: (itemId: string) => void;
@@ -57,7 +58,7 @@ interface Store extends GameState {
 
 const pickState = (s: Store): GameState => ({
   version: s.version, hero: s.hero, statDefs: s.statDefs, habits: s.habits, todos: s.todos, goals: s.goals,
-  log: s.log, achievements: s.achievements, settings: s.settings, lastProcessedDay: s.lastProcessedDay,
+  log: s.log, achievements: s.achievements, settings: s.settings, lastProcessedDay: s.lastProcessedDay, pendingReview: s.pendingReview ?? null,
   pendingChests: s.pendingChests, dayActivity: s.dayActivity, counters: s.counters,
 });
 
@@ -101,6 +102,7 @@ export const useGame = create<Store>()(
       clearDoneTodos: () => setState((s) => ({ todos: s.todos.filter((t) => !t.done) })),
 
       processDay: () => getState().run((s, c) => E.processDay(s, c)),
+      resolveReview: (done) => getState().run((s, c) => E.resolveReview(s, done, c)),
 
       buy: (id) => getState().run((s, c) => E.buyItem(s, id, c)),
       equip: (id) => getState().run((s, c) => E.equip(s, id, c)),

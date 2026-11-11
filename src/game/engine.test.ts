@@ -15,7 +15,7 @@ const NOON = new Date(2026, 10, 11, 12, 0, 0);
 const at = (d: Date, days = 0, hours = 0) => new Date(d.getTime() + days * 86400_000 + hours * 3600_000);
 const ctx = (now = NOON, rngVal = 0.99): Ctx => ({ now, rng: () => rngVal });
 
-function withHero(): GameState {
+function withHeroBase(): GameState {
   return E.createHero(
     E.initialState(),
     {
@@ -25,6 +25,8 @@ function withHero(): GameState {
     ctx(),
   ).state;
 }
+
+const withHero = withHeroBase;
 
 function addHabit(s: GameState, p: Parameters<typeof E.makeHabit>[0]) {
   const h = E.makeHabit(p, E.today(s, NOON));
@@ -199,7 +201,9 @@ describe('completing habits', () => {
   });
 });
 
-describe('daily reset & penalties', () => {
+describe('daily reset & penalties (check-in off)', () => {
+  // these tests cover automatic settlement; the review flow is tested below
+  const withHero = () => { const s = withHeroBase(); s.settings.reviewMissed = false; return s; };
   it('damages for missed daily habits and resets streak', () => {
     let s = withHero();
     const id = addHabit(s, { title: 'Run', difficulty: 'medium' });
@@ -333,5 +337,86 @@ describe('market & stats', () => {
 
   it('day helpers stay consistent', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
+  });
+});
+
+describe('catch-up review', () => {
+  const YESTERDAY = '2026-11-11';
+  it('asks before penalising unmarked habits', () => {
+    const s = withHero();
+    addHabit(s, { title: 'Run', difficulty: 'medium' });
+    addHabit(s, { title: 'Read', difficulty: 'easy' });
+    const r = E.processDay(s, ctx(at(NOON, 1)));
+    expect(r.state.pendingReview?.items.map((i) => i.title)).toEqual(['Run', 'Read']);
+    expect(r.state.hero!.hp).toBe(s.hero!.maxHp); // nothing applied yet
+    expect(r.state.lastProcessedDay).toBe(YESTERDAY);
+    // calling again while waiting changes nothing
+    expect(E.processDay(r.state, ctx(at(NOON, 1, 1))).state.pendingReview?.items).toHaveLength(2);
+  });
+
+  it('credits ticked habits and penalises only the rest', () => {
+    let s = withHero();
+    const run = addHabit(s, { title: 'Run', difficulty: 'medium', statIds: ['strength'] });
+    addHabit(s, { title: 'Read', difficulty: 'easy' });
+    s = E.processDay(s, ctx(at(NOON, 1))).state;
+    const r = E.resolveReview(s, [`${run}@${YESTERDAY}`], ctx(at(NOON, 1)));
+    s = r.state;
+    const runH = s.habits.find((h) => h.id === run)!;
+    expect(runH.history[YESTERDAY]).toBeTruthy();
+    expect(runH.streak).toBe(1);
+    expect(s.hero!.xp).toBeGreaterThan(0);
+    expect(totalStatXp(s.hero!.stats.strength)).toBe(20);
+    expect(s.dayActivity[YESTERDAY]).toBe(1);
+    // only Read (easy = 4) hurt; Run's regen was capped at full HP before the damage
+    expect(s.hero!.hp).toBe(s.hero!.maxHp - 4);
+    const rep = r.events.find((e) => e.type === 'dayreport');
+    expect(rep && rep.type === 'dayreport' && rep.missed).toEqual(['Read']);
+    expect(s.pendingReview).toBeNull();
+    expect(s.lastProcessedDay).toBe('2026-11-12');
+  });
+
+  it('applies no penalty when everything is ticked', () => {
+    let s = withHero();
+    addHabit(s, { title: 'Run', difficulty: 'hard' });
+    s = E.processDay(s, ctx(at(NOON, 1))).state;
+    const keys = s.pendingReview!.items.map((i) => i.key);
+    const r = E.resolveReview(s, keys, ctx(at(NOON, 1)));
+    expect(r.state.hero!.hp).toBe(s.hero!.maxHp);
+    expect(r.events.some((e) => e.type === 'dayreport')).toBe(false);
+  });
+
+  it('skips the review when nothing was missed', () => {
+    let s = withHero();
+    const id = addHabit(s, { title: 'Run' });
+    s = E.completeHabit(s, id, ctx()).state;
+    const r = E.processDay(s, ctx(at(NOON, 1)));
+    expect(r.state.pendingReview ?? null).toBeNull();
+    expect(r.state.lastProcessedDay).toBe('2026-11-12');
+  });
+
+  it('lets you confirm missing weekly sessions', () => {
+    let s = withHero();
+    s.habits.push(E.makeHabit({ id: 'gym', title: 'Gym', frequency: 'weekly', perWeek: 3, difficulty: 'easy' }, '2026-11-09'));
+    s.habits[0].history['2026-11-10'] = { xp: 10, gold: 5, hp: 0, stats: {}, day: '2026-11-10', prevStreak: 0, prevBest: 0 };
+    s.lastProcessedDay = '2026-11-15';
+    const monday = ctx(new Date(2026, 10, 16, 12));
+    s = E.processDay(s, monday).state;
+    const items = s.pendingReview!.items;
+    expect(items.map((i) => i.key)).toEqual(['gym@2026-11-15#1', 'gym@2026-11-15#2']);
+    // did one more session: still one short → one session's damage (4), streak broken
+    const r = E.resolveReview(s, ['gym@2026-11-15#1'], monday).state;
+    const gym = r.habits[0];
+    expect(Object.keys(gym.history).sort()).toEqual(['2026-11-10', '2026-11-15']);
+    expect(r.hero!.hp).toBe(r.hero!.maxHp - 4);
+    expect(gym.streak).toBe(0);
+  });
+
+  it('keeps a ticked daily streak alive across several missed days', () => {
+    let s = withHero();
+    const id = addHabit(s, { title: 'Run', difficulty: 'easy' });
+    s = E.processDay(s, ctx(at(NOON, 3))).state; // missed 11th, 12th, 13th
+    expect(s.pendingReview!.items).toHaveLength(3);
+    s = E.resolveReview(s, s.pendingReview!.items.map((i) => i.key), ctx(at(NOON, 3))).state;
+    expect(s.habits.find((h) => h.id === id)!.streak).toBe(3);
   });
 });

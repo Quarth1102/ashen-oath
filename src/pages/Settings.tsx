@@ -54,6 +54,19 @@ export default function Settings() {
           />
           <p className="text-xs text-bone-faint">Missed daily habits and vices you give in to cost HP. At 0 HP you fall: you lose 10% of your gold and the XP toward your next level, but never a level or a stat.</p>
         </div>
+        <label className="flex items-start gap-3 rounded-lg bg-ash-900/60 p-3">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#e0a33a]"
+            checked={settings.reviewMissed !== false}
+            onChange={(e) => updateSettings({ reviewMissed: e.target.checked })}
+            data-testid="review-toggle"
+          />
+          <span>
+            <span className="block text-sm font-semibold">Ask before applying penalties</span>
+            <span className="block text-xs text-bone-faint">When a new day starts with habits left unmarked, ask which ones you actually did. Ticked habits get their XP and keep their streak. Only the rest cost HP. Turn this off to apply penalties automatically.</span>
+          </span>
+        </label>
         <div className="space-y-2">
           <label className="label" htmlFor="reset-hour">New day begins at</label>
           <select id="reset-hour" className="input" value={settings.resetHour} onChange={(e) => updateSettings({ resetHour: +e.target.value })}>

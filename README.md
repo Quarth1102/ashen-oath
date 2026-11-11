@@ -21,6 +21,7 @@ npm run build    # production build + PWA service worker in dist/
 - **Classes are earned.** You start as a Wanderer, and at level 3 your class awakens from the stats you train most. A single dominant stat gives a pure class (Strength → Knight, Wisdom → Witch, and so on). Two close top stats give one of 15 hybrids, such as Strength + Discipline → Templar. Training everything evenly makes an Ashen Paragon. Your class is reassessed each new day and each level-up, adds a small XP bonus to its stats, and grants themed gear the first time you reach it. The thresholds are in `src/game/classes.ts`.
 - **Gold** is half the XP you earn. Spend it in the Market on gear, which changes your sprite and adds a bonus to one stat's XP. Every deed has a 5% chance to drop a loot chest.
 - **Penalties:** missed daily habits and giving in to vices cost HP. At 0 HP you *fall*: you lose 10% of your gold and the XP toward your next level, but never a level or a stat. You can turn penalties off in Settings.
+- **Catch-up check-in:** when a new day starts with habits left unmarked, the app asks "Did you do these?" before applying any penalty. Ticked habits are credited on the day they belonged to, so you get the XP and keep the streak. Only the unticked ones cost HP. Weekly habits ask how many more sessions you did. You can switch this off in Settings.
 - **Regions** unlock as you level: Ashen Hamlet (1), Gloomwood (5), Drowned Marsh (10), Bone Cathedral (20), Obsidian Peaks (35).
 
 All data stays on your device (IndexedDB). Use Settings → Export to make a backup.

@@ -4,7 +4,7 @@
  */
 import type {
   Appearance, Ctx, Difficulty, GameEvent, GameState, Goal, Habit, Hero, LogType, NewEvent,
-  Reward, Slot, StatDef, Todo,
+  Reward, ReviewItem, Slot, StatDef, Todo,
 } from './types';
 import { addDays, dayKey, weekday, weekStart } from './dates';
 import { BASE_XP, addXp, heroXpToNext, maxHpFor, splitXp, statXpToNext, streakMultiplier } from './xp';
@@ -40,7 +40,7 @@ export function initialState(): GameState {
     goals: [],
     log: [],
     achievements: {},
-    settings: { resetHour: 4, penalty: 2, regionId: null },
+    settings: { resetHour: 4, penalty: 2, regionId: null, reviewMissed: true },
     lastProcessedDay: null,
     pendingChests: 0,
     dayActivity: {},
@@ -145,7 +145,7 @@ function applyStatXp(tx: Tx, statId: string, amount: number) {
   if (r.gained > 0) tx.emit({ type: 'statup', statId, level: r.level });
 }
 
-function grantReward(tx: Tx, base: number, statIds: string[], source: string, hpRegen = 0): Reward {
+function grantReward(tx: Tx, base: number, statIds: string[], source: string, hpRegen = 0, day = tx.today): Reward {
   const hero = tx.hero;
   const valid = statIds.filter((id) => tx.s.statDefs.some((d) => d.id === id));
   const stats: Record<string, number> = {};
@@ -171,7 +171,7 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, hp
   hero.hp = Math.min(hero.maxHp, hero.hp + hpRegen);
   const hp = hero.hp - hpBefore;
 
-  tx.s.dayActivity[tx.today] = (tx.s.dayActivity[tx.today] ?? 0) + 1;
+  tx.s.dayActivity[day] = (tx.s.dayActivity[day] ?? 0) + 1;
   tx.s.counters.completions++;
 
   if (tx.ctx.rng() < LOOT_CHANCE) {
@@ -180,7 +180,7 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, hp
   }
   tx.emit({ type: 'reward', xp: total, gold, hp, source });
   tx.log('complete', `${source} (+${total} XP, +${gold} gold)`);
-  return { xp: total, gold, hp, stats, day: tx.today };
+  return { xp: total, gold, hp, stats, day };
 }
 
 function revokeReward(tx: Tx, r: Reward) {
@@ -471,25 +471,53 @@ export function toggleGoal(state: GameState, goalId: string, ctx: Ctx): Result {
 
 /* ───────────────────────────── daily reset ───────────────────────────── */
 
-export function processDay(state: GameState, ctx: Ctx): Result {
-  const tx = new Tx(state, ctx);
-  const s = tx.s;
-  if (!s.hero) return tx.done();
-  if (!s.lastProcessedDay) {
-    s.lastProcessedDay = tx.today;
-    return tx.done();
+/** Habits that were due but left unmarked between `from` (inclusive) and `to` (exclusive). */
+export function collectMissed(s: GameState, from: string, to: string): ReviewItem[] {
+  const items: ReviewItem[] = [];
+  for (let d = from; d < to; d = addDays(d, 1)) {
+    for (const h of s.habits) {
+      if (h.polarity !== 'good' || h.createdDay > d) continue;
+      if (h.frequency === 'daily') {
+        if (h.days.includes(weekday(d)) && !h.history[d]) {
+          items.push({ key: `${h.id}@${d}`, habitId: h.id, day: d, title: h.title, difficulty: h.difficulty, kind: 'daily' });
+        }
+      } else if (weekday(d) === 0 && h.createdDay <= weekStart(d)) {
+        const missing = h.perWeek - weekCount(h, d);
+        for (let n = 1; n <= missing; n++) {
+          items.push({ key: `${h.id}@${d}#${n}`, habitId: h.id, day: d, title: h.title, difficulty: h.difficulty, kind: 'weekly', session: n, missing });
+        }
+      }
+    }
   }
-  if (s.lastProcessedDay >= tx.today) return tx.done();
+  return items;
+}
 
-  let d = s.lastProcessedDay;
-  const earliest = addDays(tx.today, -CATCHUP_DAYS);
-  if (d < earliest) d = earliest;
+function catchUpStart(s: GameState, today: string): string {
+  const earliest = addDays(today, -CATCHUP_DAYS);
+  return s.lastProcessedDay! < earliest ? earliest : s.lastProcessedDay!;
+}
 
+/** Credit a habit as done on a past day (from the catch-up review). */
+function creditPast(tx: Tx, h: Habit, day: string) {
+  const prevStreak = h.streak;
+  const prevBest = h.bestStreak;
+  const mult = h.frequency === 'daily' ? streakMultiplier(h.streak) : 1;
+  const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, `${h.title} (caught up)`, regenFor(h.difficulty), day);
+  if (h.frequency === 'daily') {
+    h.streak++;
+    h.bestStreak = Math.max(h.bestStreak, h.streak);
+  }
+  h.history[day] = { ...reward, prevStreak, prevBest };
+}
+
+/** Walk each missed day: credit what the player confirmed, penalise the rest. */
+function settleDays(tx: Tx, done: Set<string>) {
+  const s = tx.s;
   const missed: string[] = [];
   let totalDmg = 0;
   let fell = false;
   let days = 0;
-  for (; d < tx.today; d = addDays(d, 1)) {
+  for (let d = catchUpStart(s, tx.today); d < tx.today; d = addDays(d, 1)) {
     days++;
     let dmg = 0;
     for (const h of s.habits) {
@@ -503,13 +531,26 @@ export function processDay(state: GameState, ctx: Ctx): Result {
       }
       if (h.frequency === 'daily') {
         if (h.days.includes(weekday(d)) && !h.history[d]) {
-          h.streak = 0;
-          dmg += damageFor(h.difficulty, s.settings.penalty);
-          missed.push(h.title);
+          if (done.has(`${h.id}@${d}`)) creditPast(tx, h, d);
+          else {
+            h.streak = 0;
+            dmg += damageFor(h.difficulty, s.settings.penalty);
+            missed.push(h.title);
+          }
         }
       } else if (weekday(d) === 0) {
         // Sunday closes the week
         if (h.createdDay > weekStart(d)) continue;
+        const missing = h.perWeek - weekCount(h, d);
+        // confirmed extra sessions are credited to the latest unmarked days of that week
+        let credited = 0;
+        for (let n = 1; n <= missing; n++) if (done.has(`${h.id}@${d}#${n}`)) credited++;
+        for (let day = d; credited > 0 && day >= weekStart(d); day = addDays(day, -1)) {
+          if (!h.history[day]) {
+            creditPast(tx, h, day);
+            credited--;
+          }
+        }
         const count = weekCount(h, d);
         if (count >= h.perWeek) {
           h.streak++;
@@ -527,11 +568,49 @@ export function processDay(state: GameState, ctx: Ctx): Result {
     }
   }
   s.lastProcessedDay = tx.today;
+  s.pendingReview = null;
   evaluateClass(tx);
   if (missed.length || totalDmg) {
     tx.emit({ type: 'dayreport', missed: [...new Set(missed)], damage: totalDmg, days });
   }
   checkAchievements(tx);
+}
+
+/**
+ * Daily reset. If habits were left unmarked and the check-in is on, it stops and raises a
+ * review ("did you do these?") instead of penalising; resolveReview() finishes the job.
+ */
+export function processDay(state: GameState, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  const s = tx.s;
+  if (!s.hero) return tx.done();
+  if (!s.lastProcessedDay) {
+    s.lastProcessedDay = tx.today;
+    return tx.done();
+  }
+  if (s.lastProcessedDay >= tx.today) return tx.done();
+  if (s.pendingReview?.through === tx.today) return tx.done(); // already waiting on the player
+
+  if (s.settings.reviewMissed !== false) {
+    const items = collectMissed(s, catchUpStart(s, tx.today), tx.today);
+    if (items.length) {
+      s.pendingReview = { through: tx.today, items };
+      return tx.done();
+    }
+  }
+  settleDays(tx, new Set());
+  return tx.done();
+}
+
+/** Finish a pending review: `done` holds the keys of items the player confirms they did. */
+export function resolveReview(state: GameState, done: string[], ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  if (!tx.s.hero || !tx.s.pendingReview || !tx.s.lastProcessedDay) return tx.done();
+  if (tx.s.lastProcessedDay >= tx.today) {
+    tx.s.pendingReview = null;
+    return tx.done();
+  }
+  settleDays(tx, new Set(done));
   return tx.done();
 }
 

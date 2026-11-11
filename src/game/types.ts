@@ -132,9 +132,30 @@ export interface LogEntry {
   text: string;
 }
 
+export interface ReviewItem {
+  /** `${habitId}@${day}` for a daily habit, `${habitId}@${sunday}#${n}` for the n-th missing weekly session */
+  key: string;
+  habitId: string;
+  day: string;
+  title: string;
+  difficulty: Difficulty;
+  kind: 'daily' | 'weekly';
+  /** weekly: which missing session this is, and how many are missing */
+  session?: number;
+  missing?: number;
+}
+
+export interface Review {
+  /** the day the review was raised on (today at the time) */
+  through: string;
+  items: ReviewItem[];
+}
+
 export interface Settings {
   resetHour: number;
   penalty: PenaltyStrength;
+  /** ask "did you do these?" before applying penalties for unmarked habits (default on) */
+  reviewMissed?: boolean;
   regionId: string | null; // null = follow highest unlocked region
 }
 
@@ -159,6 +180,8 @@ export interface GameState {
   achievements: Record<string, string>; // id -> day unlocked
   settings: Settings;
   lastProcessedDay: string | null;
+  /** unmarked habits waiting for the player to confirm before penalties apply */
+  pendingReview?: Review | null;
   pendingChests: number;
   dayActivity: Record<string, number>;
   counters: Counters;
