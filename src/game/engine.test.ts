@@ -491,3 +491,16 @@ describe('weekly habits log freely', () => {
     expect(E.weekCount(s.habits[0], '2026-11-11')).toBe(2);
   });
 });
+
+describe('habits with no penalty days', () => {
+  it('never penalise or ask for review, but still reward', () => {
+    let s = withHero();
+    const id = addHabit(s, { title: 'New thing', difficulty: 'hard', days: [] });
+    expect(E.isOptional(s.habits[0])).toBe(true);
+    let r = E.processDay(s, ctx(at(NOON, 3)));
+    expect(r.state.pendingReview ?? null).toBeNull();
+    expect(r.state.hero!.hp).toBe(s.hero!.maxHp);
+    s = E.completeHabit(r.state, id, ctx(at(NOON, 3))).state;
+    expect(s.hero!.totalXp).toBe(40);
+  });
+});

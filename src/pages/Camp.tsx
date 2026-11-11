@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Flame, Plus } from 'lucide-react';
+import { CheckCheck, Flame, Plus } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import { useActivity, useHeroClass, useHeroLook, useRegion, useToday } from '../hooks';
 import Landscape from '../components/Landscape';
@@ -11,7 +11,8 @@ import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty } from '../components/ui';
 import { Hud } from '../components/Chrome';
-import { dailyLimit, isDueOn, logsOn } from '../game/engine';
+import { dailyLimit, isDueOn, isOptional, logsOn } from '../game/engine';
+import type { Habit } from '../game/types';
 import { activeStreak } from '../game/streaks';
 
 function greeting(h: number) {
@@ -36,11 +37,36 @@ export default function Camp() {
   const events = useGame((s) => s.events);
   const lastReward = [...events].reverse().find((e) => e.type === 'reward' || e.type === 'levelup');
 
-  const due = habits.filter((h) => h.polarity === 'bad' || isDueOn(h, today));
-  const doneCount = due.filter((h) => h.polarity === 'good' && h.history[today]).length;
-  const goodDue = due.filter((h) => h.polarity === 'good').length;
-  const finished = (h: (typeof due)[number]) => Number(logsOn(h, today) >= dailyLimit(h));
-  const sorted = [...due].sort((a, b) => finished(a) - finished(b) || Number(a.polarity === 'bad') - Number(b.polarity === 'bad'));
+  // everything relevant today: due virtues, no-penalty virtues, and vices
+  const todays = habits.filter((h) => h.polarity === 'bad' || isDueOn(h, today) || isOptional(h));
+  const due = todays.filter((h) => h.polarity === 'good' && isDueOn(h, today));
+  const doneCount = due.filter((h) => h.history[today]).length;
+  const goodDue = due.length;
+  const maxed = (h: Habit) => h.polarity === 'good' && logsOn(h, today) >= dailyLimit(h);
+
+  // A habit that just hit its limit lingers ~1.2s so its checkmark and reward play, then leaves until tomorrow.
+  const [linger, setLinger] = useState<Set<string>>(new Set());
+  const prevMaxed = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const now = new Set(todays.filter(maxed).map((h) => h.id));
+    const prev = prevMaxed.current;
+    prevMaxed.current = now;
+    if (!prev) return;
+    const fresh = [...now].filter((id) => !prev.has(id));
+    if (!fresh.length) return;
+    setLinger((l) => new Set([...l, ...fresh]));
+    setTimeout(() => setLinger((l) => { const n = new Set(l); fresh.forEach((id) => n.delete(id)); return n; }), 1200);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [habits, today]);
+
+  // unfinished virtues first, then vices, then repeatable virtues already logged today
+  const rank = (h: Habit) => (h.polarity === 'bad' ? 1 : linger.has(h.id) || logsOn(h, today) === 0 ? 0 : 2);
+  const sorted = todays
+    .filter((h) => !maxed(h) || linger.has(h.id))
+    .map((h, i) => ({ h, i }))
+    .sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
+    .map(({ h }) => h);
+  const doneToday = todays.filter((h) => maxed(h) && !linger.has(h.id)).length;
   const openTodos = todos
     .filter((t) => !t.done || t.doneDay === today)
     .sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? '9999').localeCompare(b.due ?? '9999'))
@@ -95,8 +121,15 @@ export default function Camp() {
               {sorted.map((h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />)}
             </AnimatePresence>
           </div>
+        ) : doneToday ? (
+          <Empty icon="sparkles" title="Every deed is done for today">Rest, wanderer. They return at dawn.</Empty>
         ) : (
           <Empty icon="flame" title="No habits yet">Habits are the backbone of your oath. <button className="text-ember-light underline" onClick={() => setEdit({ kind: 'habit' })}>Inscribe one</button>.</Empty>
+        )}
+        {doneToday > 0 && (
+          <Link to="/quests" className="mt-2 flex items-center justify-center gap-1.5 py-1.5 text-xs text-bone-faint hover:text-bone" data-testid="done-today">
+            <CheckCheck size={14} className="text-ember/80" /> {doneToday} done today · tap to view or undo in Quests
+          </Link>
         )}
       </section>
 

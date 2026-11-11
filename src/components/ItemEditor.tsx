@@ -67,7 +67,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
   }, [target]);
 
   const isNew = !target?.item;
-  const valid = title.trim().length > 0 && (kind !== 'habit' || frequency === 'weekly' || days.length > 0 || polarity === 'bad');
+  const valid = title.trim().length > 0;
 
   const save = () => {
     if (!valid || !target) return;
@@ -180,7 +180,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
                         </div>
                         <p className="text-[11px] text-bone-faint">
                           {days.length === 0
-                            ? 'Pick at least one day.'
+                            ? 'No penalty days: log it whenever you like, and missing it never costs HP. Good for easing into a new habit.'
                             : days.length === 7
                               ? 'Due every day. Skip a day and you lose HP.'
                               : `Due on ${days.map((i) => WEEKDAY_SHORT[i]).join(', ')}. Skipping one of these days costs HP. Other days are rest days.`}

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarClock, Check, ChevronDown, Flame, Repeat, Skull, Undo2 } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import type { Goal, Habit, StatDef, Todo } from '../game/types';
-import { DIFFICULTIES, dailyLimit, habitXpPreview, isDueOn, logsOn, weekCount } from '../game/engine';
+import { DIFFICULTIES, dailyLimit, habitXpPreview, isDueOn, isOptional, logsOn, weekCount } from '../game/engine';
 import { BASE_XP } from '../game/xp';
 import { diffDays, parseDay } from '../game/dates';
 import { Bar, SkullRating, StatBadge } from './ui';
@@ -137,7 +137,8 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
   const done = repeatable ? count >= limit : count > 0;
   const bad = habit.polarity === 'bad';
   const due = isDueOn(habit, today);
-  const restDay = !bad && habit.frequency === 'daily' && !due;
+  const optional = isOptional(habit);
+  const restDay = !bad && habit.frequency === 'daily' && !due && !optional;
   const slipsToday = habit.slips[today] ?? 0;
 
   return (
@@ -196,6 +197,7 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
             </span>
           )}
           {restDay && <span>rest day</span>}
+          {optional && <span className="text-spectral/80">no penalty</span>}
           {bad && slipsToday > 0 && <span className="text-blood-light">slipped ×{slipsToday} today</span>}
           <Tags ids={habit.statIds} defs={defs} />
         </div>

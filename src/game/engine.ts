@@ -262,6 +262,11 @@ export function weekCount(h: Habit, day: string): number {
   return n;
 }
 
+/** A daily habit with no penalty days: log it whenever you like, missing it never costs HP. */
+export function isOptional(h: Habit): boolean {
+  return h.polarity === 'good' && h.frequency === 'daily' && h.days.length === 0;
+}
+
 export function isDueOn(h: Habit, day: string): boolean {
   if (h.polarity === 'bad') return false;
   if (h.frequency === 'daily') return h.days.includes(weekday(day));

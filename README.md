@@ -16,6 +16,8 @@ npm run build    # production build + PWA service worker in dist/
 ## How it plays
 
 - **Habits:** a *virtue* is either **Daily** (choose its penalty days and how many times per day it can be logged) or **Weekly** (a times-per-week target; any number of logs per day, each one counts as a session). A *vice* is something to resist: tap the skull when you give in.
+- **No-penalty habits:** leave every penalty day unselected on a daily habit to make it optional. It still earns XP, but missing it never costs HP, which is handy while easing into something new.
+- **Camp's "Today's deeds"** lists only what's left. Once-a-day habits disappear when done and return the next day. Repeatable habits drop to the bottom after a log.
 - **Repeatable habits:** set *Times per day* (1, 2, 3, 5 or unlimited) on a daily habit to log it more than once a day. Each log earns full XP and gold. On a set day, one log is what avoids the penalty and keeps the streak, so extra logs are pure bonus. For weekly habits, each log counts as a session.
 - **To-dos** are one-off tasks. **Goals** are quests made of milestones. Finishing a goal gives big XP and an optional title.
 - **XP** is split across the stats a deed is tagged with. Your hero and each stat level up on their own curves. Daily streaks add up to +50% XP.
