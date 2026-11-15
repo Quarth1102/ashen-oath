@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Pencil } from 'lucide-react';
+import { Lock, Pencil } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import { useHeroClass, useHeroLook, useRegion } from '../hooks';
 import HeroSprite from '../components/HeroSprite';
@@ -12,13 +12,14 @@ import { Bar, Sheet } from '../components/ui';
 import { statXpToNext, heroXpToNext } from '../game/xp';
 import ClassPanel from '../components/ClassPanel';
 import { GEAR_BY_ID, RARITY_COLOR, SLOTS, SLOT_NAME } from '../data/gear';
+import { wardrobe } from '../game/wardrobe';
 import type { Appearance, Slot } from '../game/types';
 import { rgba } from '../art/color';
 
 export default function Hero() {
   const hero = useGame((s) => s.hero)!;
   const defs = useGame((s) => s.statDefs);
-  const { updateHero, equip, unequip } = useGame.getState();
+  const { updateHero, equip, unequip, equipRankSet } = useGame.getState();
   const look = useHeroLook()!;
   const region = useRegion();
   const cls = useHeroClass();
@@ -26,8 +27,12 @@ export default function Hero() {
   const [editLook, setEditLook] = useState<Appearance | null>(null);
   const [editStory, setEditStory] = useState<{ name: string; backstory: string } | null>(null);
 
-  const owned = (s: Slot) => hero.inventory.map((id) => GEAR_BY_ID[id]).filter((i) => i && i.slot === s);
-  const bonuses = SLOTS.map((s) => hero.equipped[s] && GEAR_BY_ID[hero.equipped[s]!]?.bonus).filter(Boolean) as { stat: string; pct: number }[];
+  // this rank's wardrobe: unlocked pieces, and the ones still waiting on a level
+  const pieces = (s: Slot) => wardrobe(hero, defs).filter((i) => i.slot === s).sort((a, b) => a.unlock - b.unlock);
+  const unlocked = (s: Slot) => pieces(s).filter((i) => hero.level >= i.unlock);
+  const upcoming = (s: Slot) => pieces(s).filter((i) => hero.level < i.unlock);
+  const nextUnlock = wardrobe(hero, defs).filter((i) => i.unlock > hero.level).sort((a, b) => a.unlock - b.unlock)[0]?.unlock;
+  const wardrobeName = cls.kind === 'wanderer' ? 'Wanderer' : cls.kind === 'paragon' ? 'every rank' : cls.name;
 
   return (
     <div className="space-y-5">
@@ -76,7 +81,6 @@ export default function Hero() {
             <ul className="mt-3 space-y-3">
               {defs.map((d, i) => {
                 const p = hero.stats[d.id] ?? { level: 1, xp: 0 };
-                const bonus = bonuses.filter((b) => b.stat === d.id).reduce((a, b) => a + b.pct, 0);
                 return (
                   <motion.li key={d.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center gap-3" data-testid={`stat-${d.id}`}>
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: rgba(d.color, 0.12), color: d.color }}>
@@ -86,7 +90,6 @@ export default function Hero() {
                       <div className="flex items-baseline justify-between">
                         <span className="text-sm font-semibold">
                           {d.name}
-                          {bonus > 0 && <span className="ml-1.5 text-[10px] text-spectral">+{bonus}% gear</span>}
                         </span>
                         <span className="font-pixel text-xs" style={{ color: d.color }}>LV {p.level}</span>
                       </div>
@@ -99,7 +102,18 @@ export default function Hero() {
           </div>
 
           <div className="panel p-4">
-            <h2 className="h-display mb-3 text-lg font-bold">Equipment</h2>
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="h-display text-lg font-bold">Equipment</h2>
+                <p className="text-xs text-bone-faint">
+                  Wardrobe: <span style={{ color: cls.aura }}>{wardrobeName}</span>
+                  {nextUnlock ? ` · more at level ${nextUnlock}` : ''}
+                </p>
+              </div>
+            </div>
+            <button className="btn-primary mb-3 w-full" onClick={equipRankSet} data-testid="wear-rank">
+              {cls.kind === 'wanderer' ? 'Wear wanderer’s gear' : `Wear my ${cls.kind === 'paragon' ? 'Paragon' : cls.name} equipment`}
+            </button>
             <div className="grid grid-cols-2 gap-2">
               {SLOTS.map((s) => {
                 const item = hero.equipped[s] ? GEAR_BY_ID[hero.equipped[s]!] : undefined;
@@ -107,7 +121,6 @@ export default function Hero() {
                   <button key={s} onClick={() => setSlot(s)} className="panel-inset p-3 text-left transition hover:border-ash-400" style={item ? { borderColor: rgba(RARITY_COLOR[item.rarity], 0.4) } : undefined}>
                     <p className="label">{SLOT_NAME[s]}</p>
                     <p className="mt-1 truncate text-sm font-semibold" style={{ color: item ? RARITY_COLOR[item.rarity] : '#7d7468' }}>{item?.name ?? 'Empty'}</p>
-                    {item?.bonus && <p className="text-[11px] text-bone-faint">+{item.bonus.pct}% {defs.find((d) => d.id === item.bonus!.stat)?.name ?? item.bonus.stat}</p>}
                   </button>
                 );
               })}
@@ -119,8 +132,8 @@ export default function Hero() {
       <Sheet open={!!slot} onClose={() => setSlot(null)} title={slot ? `Choose ${SLOT_NAME[slot].toLowerCase()}` : ''}>
         {slot && (
           <div className="space-y-2">
-            {owned(slot).length === 0 && <p className="text-sm text-bone-faint">You own nothing for this slot. Visit the Market.</p>}
-            {owned(slot).map((it) => {
+            {unlocked(slot).length === 0 && <p className="text-sm text-bone-faint">Nothing unlocked for this slot yet.</p>}
+            {unlocked(slot).map((it) => {
               const on = hero.equipped[slot] === it.id;
               return (
                 <button
@@ -133,12 +146,22 @@ export default function Hero() {
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold" style={{ color: RARITY_COLOR[it.rarity] }}>{it.name}</p>
                     <p className="text-xs text-bone-faint">{it.desc}</p>
-                    {it.bonus && <p className="text-[11px] text-spectral">+{it.bonus.pct}% {defs.find((d) => d.id === it.bonus!.stat)?.name ?? it.bonus.stat} XP</p>}
                   </div>
                   <span className={`text-xs font-bold ${on ? 'text-ember-light' : 'text-bone-faint'}`}>{on ? 'Worn' : 'Equip'}</span>
                 </button>
               );
             })}
+            {upcoming(slot).map((it) => (
+              <div key={it.id} className="panel-inset flex w-full items-center gap-3 p-2 opacity-60">
+                <div className="grayscale"><HeroSprite look={{ ...look, equipped: { ...look.equipped, [slot]: it.id } }} size={64} idle={false} shadow={false} /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{it.name}</p>
+                  <p className="text-xs text-bone-faint">{it.desc}</p>
+                </div>
+                <span className="flex shrink-0 items-center gap-1 text-xs text-bone-faint"><Lock size={12} /> Lv {it.unlock}</span>
+              </div>
+            ))}
+            <p className="pt-1 text-[11px] text-bone-faint">Gear is cosmetic. Your rank decides your wardrobe, and new pieces unlock at levels 3, 8, 15 and 25.</p>
           </div>
         )}
       </Sheet>

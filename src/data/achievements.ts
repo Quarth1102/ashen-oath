@@ -1,5 +1,6 @@
 import type { GameState } from '../game/types';
 import { activeStreak } from '../game/streaks';
+import { availableGear } from '../game/wardrobe';
 
 export interface Achievement {
   id: string;
@@ -32,8 +33,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'goal_5', name: 'Saga-Maker', desc: 'Complete 5 goal quests.', icon: 'castle', gold: 250, title: 'the Saga-Maker', check: (s) => s.counters.goalsDone >= 5 },
   { id: 'todo_25', name: 'Errand-Runner', desc: 'Finish 25 to-dos.', icon: 'check', gold: 60, check: (s) => s.counters.todosDone >= 25 },
   { id: 'fallen', name: 'Risen from Ash', desc: 'Fall in battle and rise again.', icon: 'skull', gold: 25, title: 'the Twice-Born', check: (s) => s.counters.falls >= 1 },
-  { id: 'shopper', name: 'Coin Well Spent', desc: 'Buy something from the Market.', icon: 'coins', gold: 10, check: (s) => s.counters.purchases >= 1 },
-  { id: 'collector', name: 'Hoarder', desc: 'Own 12 pieces of gear.', icon: 'package', gold: 150, check: (s) => (s.hero?.inventory.length ?? 0) >= 12 },
+  { id: 'shopper', name: 'Coin Well Spent', desc: 'Spend gold on your camp.', icon: 'coins', gold: 10, check: (s) => s.counters.purchases >= 1 },
+  { id: 'collector', name: 'Wardrobe of a Hero', desc: 'Unlock 12 pieces of gear.', icon: 'package', gold: 150, check: (s) => (s.hero ? availableGear(s.hero, s.statDefs).length : 0) >= 12 },
   { id: 'perfect_1', name: 'Flawless', desc: 'Complete every due habit in a day.', icon: 'sparkles', gold: 25, check: (s) => Object.keys(s.perfectDays ?? {}).length >= 1 },
   { id: 'perfect_7', name: 'Seven Seals', desc: 'Earn 7 perfect days.', icon: 'gem', gold: 150, title: 'the Flawless', check: (s) => Object.keys(s.perfectDays ?? {}).length >= 7 },
   { id: 'combo_5', name: 'Chain of Deeds', desc: 'Reach a ×5 combo.', icon: 'flame', gold: 30, check: (s) => (s.combo?.count ?? 0) >= 5 },

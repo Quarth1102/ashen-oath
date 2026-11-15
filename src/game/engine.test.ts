@@ -128,9 +128,8 @@ describe('earned classes', () => {
     expect(s.hero!.level).toBe(3);
     expect(s.hero!.classId).toBe('pure:strength');
     expect(s.hero!.title).toBe('the Unbroken');
-    expect(s.hero!.inventory).toEqual(expect.arrayContaining(['st-knight-armor', 'st-knight-sword']));
     const ev = r.events.find((e) => e.type === 'classchange');
-    expect(ev && ev.type === 'classchange' && ev.kit.length).toBe(2);
+    expect(ev && ev.type === 'classchange' && ev.kit.sort()).toEqual(['st-knight-armor', 'st-knight-sword']);
     // next strength deed gets +10%
     const before = totalStatXp(s.hero!.stats.strength);
     s = E.completeHabit(s, id, ctx(at(NOON, 1))).state;
@@ -186,14 +185,15 @@ describe('completing habits', () => {
     expect(r.events.some((e) => e.type === 'levelup')).toBe(true);
   });
 
-  it('applies gear bonus to tagged stats', () => {
+  it('gear is cosmetic: no XP bonus', () => {
     let s = withHero();
-    s.hero!.inventory.push('helm-iron');
-    s = E.equip(s, 'helm-iron', ctx()).state; // +8% strength
+    s.hero!.classId = 'pure:wisdom'; // a Witch: no class bonus to strength
+    s.hero!.level = 25;
+    s.hero!.equipped = { weapon: 'wi-moonstaff', armor: 'wi-robe' };
     const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['strength'] });
     blockPerfect(s);
     s = E.completeHabit(s, id, ctx()).state;
-    expect(totalStatXp(s.hero!.stats.strength)).toBe(Math.round(40 * 1.08));
+    expect(totalStatXp(s.hero!.stats.strength)).toBe(40);
   });
 
   it('drops a chest when the loot roll succeeds', () => {
@@ -316,16 +316,7 @@ describe('todos & goals', () => {
   });
 });
 
-describe('market & stats', () => {
-  it('buys only with enough gold and level', () => {
-    let s = withHero();
-    s.hero!.gold = 100;
-    expect(E.buyItem(s, 'helm-iron', ctx()).state.hero!.inventory).not.toContain('helm-iron'); // too poor + level
-    s = E.buyItem(s, 'sword-long', ctx()).state;
-    expect(s.hero!.inventory).toContain('sword-long');
-    expect(s.hero!.gold).toBe(100 - 80 + 10); // + shopper achievement
-  });
-
+describe('stats', () => {
   it('adds and removes custom stats, stripping tags', () => {
     let s = withHero();
     s = E.addStat(s, { name: 'Faith', icon: 'moon', color: '#fff' }, ctx()).state;
@@ -658,5 +649,70 @@ describe('weekly recap', () => {
     expect(rec.perfectDays).toEqual(['2026-11-11', '2026-11-12']);
     expect(rec.stats[0].id).toBe('intellect');
     expect(rec.habits[0]).toMatchObject({ title: 'Read', done: 2, due: 5 }); // Wed–Sun
+  });
+});
+
+describe('rank wardrobes', () => {
+  it('starts in wanderer gear and cannot wear any rank gear', () => {
+    let s = withHero();
+    expect(s.hero!.equipped).toEqual({ cloak: 'wd-cloak', weapon: 'wd-staff' });
+    s.hero!.level = 30;
+    expect(E.equip(s, 'st-knight-sword', ctx()).state.hero!.equipped.weapon).toBe('wd-staff');
+  });
+
+  it('only allows the current rank, unlocked by level', () => {
+    let s = withHero();
+    s.hero!.classId = 'pure:strength';
+    s.hero!.level = 3;
+    s = E.equip(s, 'st-knight-sword', ctx()).state;
+    expect(s.hero!.equipped.weapon).toBe('st-knight-sword');
+    expect(E.equip(s, 'st-warden-axe', ctx()).state.hero!.equipped.weapon).toBe('st-knight-sword'); // a Warden's
+    expect(E.equip(s, 'helm-iron', ctx()).state.hero!.equipped.helm).toBeUndefined(); // level 8 piece
+  });
+
+  it('hybrids wear both parents, paragons wear everything', () => {
+    let s = withHero();
+    s.hero!.level = 8;
+    s.hero!.classId = 'hybrid:discipline+strength';
+    s = E.equip(s, 'helm-iron', ctx()).state;
+    s = E.equip(s, 'ro-fang', ctx()).state;
+    expect(s.hero!.equipped).toMatchObject({ helm: 'helm-iron', weapon: 'ro-fang' });
+    s.hero!.classId = 'paragon';
+    expect(E.equip(s, 'he-cape', ctx()).state.hero!.equipped.cloak).toBe('he-cape');
+  });
+
+  it('puts away old-rank gear when the rank changes', () => {
+    let s = withHero();
+    s.settings.reviewMissed = false;
+    s.hero!.level = 8;
+    s.hero!.classId = 'pure:strength';
+    s.hero!.classesAttained = ['pure:strength'];
+    s = E.equipRankSet(s, ctx()).state;
+    expect(s.hero!.equipped).toMatchObject({ armor: 'st-knight-armor', helm: 'helm-iron', weapon: 'sword-long', cloak: 'cloak-crimson' });
+    s.hero!.stats.vitality = { level: 1, xp: 200 };
+    const r = E.processDay(s, ctx(at(NOON, 1)));
+    expect(r.state.hero!.classId).toBe('pure:vitality');
+    expect(Object.values(r.state.hero!.equipped).filter((id) => id?.startsWith('st-knight') || id === 'helm-iron')).toEqual([]);
+    const ev = r.events.find((e) => e.type === 'classchange');
+    expect(ev && ev.type === 'classchange' && ev.kit).toContain('wa-antlers');
+  });
+
+  it('announces new pieces at level milestones', () => {
+    let s = withHero();
+    s.hero!.classId = 'pure:strength';
+    s.hero!.level = 7;
+    s.hero!.xp = heroXpToNext(7) - 1;
+    blockPerfect(s);
+    const id = addHabit(s, { title: 'x', difficulty: 'easy' });
+    const r = E.completeHabit(s, id, ctx());
+    const ev = r.events.find((e) => e.type === 'wardrobe');
+    expect(ev && ev.type === 'wardrobe' && ev.items.sort()).toEqual(['cloak-crimson', 'helm-iron', 'sword-long']);
+  });
+
+  it('chests hold gold', () => {
+    const s = withHero();
+    s.pendingChests = 1;
+    const r = E.openChest(s, ctx(NOON, 0.5));
+    expect(r.state.hero!.gold).toBeGreaterThan(s.hero!.gold);
   });
 });

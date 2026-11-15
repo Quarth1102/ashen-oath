@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Coins, Lock } from 'lucide-react';
+import { Check, Coins, Gift, Lock } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import { useHeroClass, useHeroLook, useRegion } from '../hooks';
 import Landscape from '../components/Landscape';
@@ -31,7 +31,8 @@ function PriceButton({ id, price, disabled, onBuy, label }: { id: string; price:
 export default function CampBuild() {
   const hero = useGame((s) => s.hero)!;
   const camp = useGame((s) => s.camp) ?? DEFAULT_CAMP;
-  const { buyUpgrade, buyPet, customizeCamp } = useGame.getState();
+  const { buyUpgrade, buyPet, customizeCamp, openChest } = useGame.getState();
+  const chests = useGame((s) => s.pendingChests);
   const look = useHeroLook()!;
   const region = useRegion();
   const cls = useHeroClass();
@@ -51,6 +52,28 @@ export default function CampBuild() {
         subtitle="Build it up, one coin at a time."
         right={<span className="flex items-center gap-1.5 rounded-full bg-ember-dark/30 px-3 py-1.5 font-pixel text-ember-light ring-1 ring-ember/30"><Coins size={15} /> {hero.gold}</span>}
       />
+      <AnimatePresence>
+        {chests > 0 && (
+          <motion.button
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, height: 0 }}
+            onClick={openChest}
+            className="panel mb-4 flex w-full items-center gap-4 p-4 text-left"
+            style={{ borderColor: rgba('#e0a33a', 0.6) }}
+            data-testid="open-chest"
+          >
+            <motion.span animate={{ rotate: [0, -10, 10, -6, 0], y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.4, repeatDelay: 0.8 }}>
+              <Gift size={34} className="text-ember-light drop-shadow-[0_0_10px_rgba(224,163,58,.7)]" />
+            </motion.span>
+            <span className="flex-1">
+              <span className="block font-display font-bold text-ember-light">{chests} loot chest{chests > 1 ? 's' : ''} found</span>
+              <span className="text-xs text-bone-faint">Tap to open. Each holds gold for your camp.</span>
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       <div className="panel overflow-hidden">
         <Landscape region={region} className="h-56 w-full md:h-64">
           {(g, s) => <HeroScene look={look} activity="camp" region={region} ground={g} scale={s} aura={cls.aura} camp={camp} />}

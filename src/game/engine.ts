@@ -10,7 +10,8 @@ import { addDays, dayKey, weekday, weekStart } from './dates';
 import { BASE_XP, addXp, heroXpToNext, maxHpFor, splitXp, statXpToNext, streakMultiplier } from './xp';
 import { FALL_GOLD_LOSS, damageFor, regenFor } from './penalty';
 import { LOOT_CHANCE, RARITY_GOLD, goldFor, rollRarity } from './economy';
-import { GEAR, GEAR_BY_ID } from '../data/gear';
+import { GEAR_BY_ID } from '../data/gear';
+import { availableGear, canWear, rankSet } from './wardrobe';
 import { classBonus, determineClassId, normalizeClassId, resolveClass, CLASS_UNLOCK_LEVEL } from './classes';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { regionsUnlockedBetween } from '../data/regions';
@@ -75,18 +76,21 @@ class Tx {
   }
 }
 
+/** Class XP bonus (gear is purely cosmetic). */
 function xpBonus(s: GameState, hero: Hero, statId: string): number {
-  return gearBonus(hero, statId) + classBonus(resolveClass(hero.classId, s.statDefs), statId);
+  return classBonus(resolveClass(hero.classId, s.statDefs), statId);
 }
 
-function gearBonus(hero: Hero, statId: string): number {
-  let pct = 0;
-  for (const id of Object.values(hero.equipped)) {
-    const item = id ? GEAR_BY_ID[id] : undefined;
-    if (item?.bonus?.stat === statId) pct += item.bonus.pct;
+/** Take off anything the hero's rank and level no longer allow. */
+function enforceWardrobe(tx: Tx) {
+  const hero = tx.s.hero;
+  if (!hero) return;
+  for (const [slot, id] of Object.entries(hero.equipped)) {
+    if (id && !canWear(hero, tx.s.statDefs, id)) delete hero.equipped[slot as Slot];
   }
-  return pct / 100;
 }
+
+const gearIds = (s: GameState) => (s.hero ? new Set(availableGear(s.hero, s.statDefs).map((i) => i.id)) : new Set<string>());
 
 function applyHeroXp(tx: Tx, amount: number): number {
   const hero = tx.hero;
@@ -124,14 +128,13 @@ function evaluateClass(tx: Tx) {
   }
   const from = resolveClass(current, tx.s.statDefs);
   const to = resolveClass(next, tx.s.statDefs);
+  const before = gearIds(tx.s);
   hero.classId = next;
   const attained = (hero.classesAttained ??= []);
-  let kit: string[] = [];
-  if (!attained.includes(next)) {
-    attained.push(next);
-    kit = to.kit.filter((id) => GEAR_BY_ID[id] && !hero.inventory.includes(id));
-    hero.inventory.push(...kit);
-  }
+  if (!attained.includes(next)) attained.push(next);
+  // the new rank's wardrobe: pieces the hero couldn't wear before; old-rank pieces come off
+  const kit = [...gearIds(tx.s)].filter((id) => !before.has(id));
+  enforceWardrobe(tx);
   if (!hero.titles.includes(to.epithet)) hero.titles.push(to.epithet);
   if (hero.title === from.epithet || hero.title === 'the Oathsworn') hero.title = to.epithet;
   tx.emit({ type: 'classchange', from: current, to: next, kit });
@@ -189,9 +192,17 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, op
   }
   const gold = Math.round(goldFor(total) * (1 + perks.gold));
 
+  const gearBefore = gearIds(tx.s);
   const leveled = applyHeroXp(tx, total) > 0;
   for (const [id, gain] of Object.entries(stats)) applyStatXp(tx, id, gain);
-  if (leveled) evaluateClass(tx);
+  if (leveled) {
+    evaluateClass(tx);
+    const fresh = [...gearIds(tx.s)].filter((id) => !gearBefore.has(id));
+    if (fresh.length && !tx.events.some((e) => e.type === 'classchange')) {
+      tx.emit({ type: 'wardrobe', items: fresh });
+      tx.log('system', `New gear unlocked: ${fresh.map((id) => GEAR_BY_ID[id].name).join(', ')}.`);
+    }
+  }
   hero.gold += gold;
 
   const hpBefore = hero.hp;
@@ -401,7 +412,7 @@ export function createHero(state: GameState, input: NewHeroInput, ctx: Ctx): Res
     classId: 'wanderer',
     classesAttained: [],
     appearance: input.appearance,
-    equipped: {},
+    equipped: { cloak: 'wd-cloak', weapon: 'wd-staff' },
     inventory: [],
     titles: ['the Oathsworn'],
     level: 1,
@@ -713,6 +724,7 @@ function settleDays(tx: Tx, done: Set<string>) {
   }
   s.lastProcessedDay = tx.today;
   s.pendingReview = null;
+  enforceWardrobe(tx);
   // a vacation with an end date finishes on its own
   const v = s.settings.vacation;
   if (v?.until && v.until < tx.today) {
@@ -820,26 +832,12 @@ export function customizeCamp(state: GameState, patch: Partial<Pick<CampState, '
   return tx.done();
 }
 
-/* ───────────────────────────── market ───────────────────────────── */
-
-export function buyItem(state: GameState, itemId: string, ctx: Ctx): Result {
-  const tx = new Tx(state, ctx);
-  const item = GEAR_BY_ID[itemId];
-  const hero = tx.hero;
-  if (!item || item.starter || hero.inventory.includes(itemId)) return tx.done();
-  if (hero.gold < item.price || hero.level < item.minLevel) return tx.done();
-  hero.gold -= item.price;
-  hero.inventory.push(itemId);
-  tx.s.counters.purchases++;
-  tx.log('purchase', `Bought ${item.name} for ${item.price} gold.`);
-  checkAchievements(tx);
-  return tx.done();
-}
+/* ───────────────────────────── wardrobe & chests ───────────────────────────── */
 
 export function equip(state: GameState, itemId: string, ctx: Ctx): Result {
   const tx = new Tx(state, ctx);
   const item = GEAR_BY_ID[itemId];
-  if (!item || !tx.hero.inventory.includes(itemId)) return tx.done();
+  if (!item || !canWear(tx.hero, tx.s.statDefs, itemId)) return tx.done();
   tx.hero.equipped[item.slot] = itemId;
   return tx.done();
 }
@@ -850,24 +848,24 @@ export function unequip(state: GameState, slot: Slot, ctx: Ctx): Result {
   return tx.done();
 }
 
+/** Put on the best unlocked piece of the hero's rank in every slot. */
+export function equipRankSet(state: GameState, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  tx.hero.equipped = rankSet(tx.hero, tx.s.statDefs);
+  return tx.done();
+}
+
+/** Loot chests hold gold (spent on the camp). */
 export function openChest(state: GameState, ctx: Ctx): Result {
   const tx = new Tx(state, ctx);
   if (tx.s.pendingChests <= 0) return tx.done();
   tx.s.pendingChests--;
   tx.s.counters.chestsOpened++;
   const rarity = rollRarity(ctx.rng);
-  const pool = GEAR.filter((i) => !i.starter && i.rarity === rarity && !tx.hero.inventory.includes(i.id));
-  if (pool.length) {
-    const item = pool[Math.floor(ctx.rng() * pool.length)];
-    tx.hero.inventory.push(item.id);
-    tx.emit({ type: 'loot', rarity, itemId: item.id });
-    tx.log('loot', `Found ${item.name} in a chest.`);
-  } else {
-    const gold = RARITY_GOLD[rarity];
-    tx.hero.gold += gold;
-    tx.emit({ type: 'loot', rarity, gold });
-    tx.log('loot', `Found ${gold} gold in a chest.`);
-  }
+  const gold = RARITY_GOLD[rarity];
+  tx.hero.gold += gold;
+  tx.emit({ type: 'loot', rarity, gold });
+  tx.log('loot', `Found ${gold} gold in a chest.`);
   checkAchievements(tx);
   return tx.done();
 }

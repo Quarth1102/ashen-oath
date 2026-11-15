@@ -11,7 +11,6 @@ import Onboarding from './pages/Onboarding';
 import Camp from './pages/Camp';
 import Quests from './pages/Quests';
 import Hero from './pages/Hero';
-import Market from './pages/Market';
 import Chronicle from './pages/Chronicle';
 import Settings from './pages/Settings';
 import CampBuild from './pages/CampBuild';
@@ -67,7 +66,6 @@ export default function App() {
                 <Route path="/quests" element={<Quests />} />
                 <Route path="/camp" element={<CampBuild />} />
                 <Route path="/hero" element={<Hero />} />
-                <Route path="/market" element={<Market />} />
                 <Route path="/chronicle" element={<Chronicle />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -9,13 +9,14 @@ import { GEAR_BY_ID, RARITY_COLOR, SLOT_NAME } from '../data/gear';
 import { useHeroClass } from '../hooks';
 import { buzz, playChime, playLevelUp, playPerfectDay } from '../audio/sound';
 import WeeklyRecapView from './WeeklyRecap';
+import { rankSet } from '../game/wardrobe';
 import { resolveClass, CLASS_BONUS } from '../game/classes';
 import HeroSprite from './HeroSprite';
 import Landscape from './Landscape';
 import { Icon } from './Icon';
 import { rgba } from '../art/color';
 
-const MODAL_TYPES = ['fall', 'dayreport', 'levelup', 'classchange', 'perfectday', 'region', 'goal', 'loot', 'weeklyrecap'] as const;
+const MODAL_TYPES = ['fall', 'dayreport', 'levelup', 'classchange', 'wardrobe', 'perfectday', 'region', 'goal', 'loot', 'weeklyrecap'] as const;
 type ModalEvent = Extract<GameEvent, { type: (typeof MODAL_TYPES)[number] }>;
 const TOAST_TYPES = ['achievement', 'statup', 'chest', 'damage'] as const;
 
@@ -107,7 +108,7 @@ function Toast({ event, onDone }: { event: GameEvent; onDone: () => void }) {
   } else if (event.type === 'chest') {
     icon = <Gift size={18} />;
     title = 'A loot chest dropped!';
-    body = 'Open it in the Market.';
+    body = 'Open it in your Camp for gold.';
   } else if (event.type === 'damage') {
     color = '#ff5a64';
     icon = <HeartCrack size={18} />;
@@ -148,6 +149,7 @@ function Rays({ color }: { color: string }) {
 function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
   const hero = useGame((s) => s.hero);
   const equip = useGame((s) => s.equip);
+  const equipRankSet = useGame((s) => s.equipRankSet);
   const updateSettings = useGame((s) => s.updateSettings);
   const defs = useGame((s) => s.statDefs);
   const cls = useHeroClass();
@@ -202,13 +204,14 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
       tone = to.aura;
       const statNames = to.stats.map((id) => defs.find((d) => d.id === id)?.name).filter(Boolean);
       const pct = to.kind === 'pure' ? CLASS_BONUS.pure : to.kind === 'hybrid' ? CLASS_BONUS.hybrid : CLASS_BONUS.paragon;
-      const equipKit = () => { event.kit.forEach((id) => equip(id)); onClose(); };
+      const set = rankSet(hero, defs);
+      const equipKit = () => { equipRankSet(); onClose(); };
       content = (
         <>
           <Rays color={tone} />
           <p className="label">{from.kind === 'wanderer' ? 'Your path is revealed' : `No longer a ${from.name}`}</p>
           <HeroSprite
-            look={event.kit.length ? { ...look, equipped: { ...look.equipped, ...Object.fromEntries(event.kit.map((id) => [GEAR_BY_ID[id].slot, id])) } } : look}
+            look={event.kit.length ? { ...look, equipped: set } : look}
             size={144}
             aura={to.aura}
             celebrate={event.id}
@@ -222,9 +225,10 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
           <p className="mt-2 text-xs text-bone-faint">
             Earned through {statNames.length > 2 ? 'balance in all things' : statNames.join(' and ')}. +{pct}% XP to {to.kind === 'paragon' ? 'every stat' : statNames.join(' and ')}.
           </p>
-          {event.kit.length > 0 && <p className="mt-2 text-xs text-spectral">Class gear added to your inventory: {event.kit.map((id) => GEAR_BY_ID[id].name).join(', ')}.</p>}
+          {event.kit.length > 0 && <p className="mt-2 text-xs text-spectral">Your rank’s wardrobe is open: {event.kit.map((id) => GEAR_BY_ID[id].name).join(', ')}.</p>}
+          {from.kind !== 'wanderer' && <p className="mt-1 text-[11px] text-bone-faint">{from.name} gear has been put away.</p>}
           <div className="mt-6 flex w-full gap-2">
-            {event.kit.length > 0 && <button className="btn-primary flex-1" onClick={equipKit}>Wear class gear</button>}
+            {event.kit.length > 0 && <button className="btn-primary flex-1" onClick={equipKit}>Wear rank equipment</button>}
             <button className={`${event.kit.length ? 'btn-ghost' : 'btn-primary'} flex-1`} onClick={onClose} autoFocus>Onward</button>
           </div>
         </>
@@ -292,7 +296,6 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
       );
       break;
     case 'loot': {
-      const item = event.itemId ? GEAR_BY_ID[event.itemId] : undefined;
       tone = RARITY_COLOR[event.rarity];
       content = (
         <>
@@ -301,24 +304,36 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
             <Gift size={72} style={{ color: tone }} />
           </motion.div>
           <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.85, type: 'spring', stiffness: 220, damping: 14 }} className="flex flex-col items-center">
-            <p className="label" style={{ color: tone }}>{event.rarity}</p>
-            {item ? (
-              <>
-                <HeroSprite look={{ ...look, equipped: { ...look.equipped, [item.slot]: item.id } }} size={128} aura={tone} />
-                <h2 className="h-display text-2xl font-black" style={{ color: tone }}>{item.name}</h2>
-                <p className="text-xs text-bone-faint">{SLOT_NAME[item.slot]}{item.bonus ? ` · +${item.bonus.pct}% ${item.bonus.stat} XP` : ''}</p>
-                <p className="mt-2 text-sm italic text-bone-dim">{item.desc}</p>
-              </>
-            ) : (
-              <>
-                <Coins size={64} className="my-6 text-ember-light" />
-                <h2 className="h-display text-2xl font-black text-ember-light">{event.gold} gold</h2>
-              </>
-            )}
+            <p className="label" style={{ color: tone }}>{event.rarity} chest</p>
+            <Coins size={64} className="my-6 text-ember-light" />
+            <h2 className="h-display text-2xl font-black text-ember-light">{event.gold} gold</h2>
+            <p className="mt-1 text-xs text-bone-faint">Spend it on your camp.</p>
           </motion.div>
+          <button className="btn-primary mt-6 w-full" onClick={onClose} autoFocus>Take it</button>
+        </>
+      );
+      break;
+    }
+    case 'wardrobe': {
+      const items = event.items.map((id) => GEAR_BY_ID[id]).filter(Boolean);
+      const preview = { ...look, equipped: { ...look.equipped, ...Object.fromEntries(items.map((i) => [i.slot, i.id])) } };
+      tone = RARITY_COLOR[items[0]?.rarity ?? 'rare'];
+      content = (
+        <>
+          <Rays color={tone} />
+          <p className="label">New equipment unlocked</p>
+          <HeroSprite look={preview} size={144} aura={tone} celebrate={event.id} className="mt-2" />
+          <ul className="mt-2 w-full space-y-1">
+            {items.map((i) => (
+              <li key={i.id} className="flex items-center justify-between rounded-lg bg-ash-900/60 px-3 py-2 text-sm">
+                <span className="font-semibold" style={{ color: RARITY_COLOR[i.rarity] }}>{i.name}</span>
+                <span className="text-xs text-bone-faint">{SLOT_NAME[i.slot]}</span>
+              </li>
+            ))}
+          </ul>
           <div className="mt-6 flex w-full gap-2">
-            {item && <button className="btn-primary flex-1" onClick={() => { equip(item.id); onClose(); }}>Equip</button>}
-            <button className="btn-ghost flex-1" onClick={onClose} autoFocus>{item ? 'Keep' : 'Take it'}</button>
+            <button className="btn-primary flex-1" onClick={() => { items.forEach((i) => equip(i.id)); onClose(); }} autoFocus>Wear it</button>
+            <button className="btn-ghost flex-1" onClick={onClose}>Later</button>
           </div>
         </>
       );

@@ -232,7 +232,8 @@ export type GameEvent =
   | { id: string; type: 'classchange'; from: string; to: string; kit: string[] }
   | { id: string; type: 'combo'; count: number }
   | { id: string; type: 'perfectday'; xp: number }
-  | { id: string; type: 'weeklyrecap'; week: string };
+  | { id: string; type: 'weeklyrecap'; week: string }
+  | { id: string; type: 'wardrobe'; items: string[] };
 
 export type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 export type NewEvent = DistributiveOmit<GameEvent, 'id'>;

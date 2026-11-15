@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Coins, Flame, Gift, ListChecks, Scroll, Settings, Shield, Store, Tent } from 'lucide-react';
+import { Coins, Flame, Gift, ListChecks, Scroll, Settings, Shield, Tent } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import { heroXpToNext } from '../game/xp';
 import { Bar } from './ui';
@@ -13,7 +13,6 @@ export const NAV = [
   { to: '/quests', label: 'Quests', icon: ListChecks },
   { to: '/camp', label: 'Camp', icon: Tent },
   { to: '/hero', label: 'Hero', icon: Shield },
-  { to: '/market', label: 'Market', icon: Store },
   { to: '/chronicle', label: 'Chronicle', icon: Scroll },
 ];
 
@@ -59,12 +58,12 @@ export function Hud() {
         <ComboMeter />
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        <NavLink to="/market" className="flex items-center gap-1 rounded-full bg-ember-dark/30 px-2 py-0.5 font-pixel text-sm text-ember-light ring-1 ring-ember/30" data-testid="hud-gold">
+        <NavLink to="/camp" className="flex items-center gap-1 rounded-full bg-ember-dark/30 px-2 py-0.5 font-pixel text-sm text-ember-light ring-1 ring-ember/30" data-testid="hud-gold">
           <Coins size={13} /> <AnimatedNumber value={hero.gold} />
         </NavLink>
         <div className="flex items-center gap-1">
           {chests > 0 && (
-            <NavLink to="/market" className="relative rounded-full p-1 text-ember-light" aria-label={`${chests} chests to open`}>
+            <NavLink to="/camp" className="relative rounded-full p-1 text-ember-light" aria-label={`${chests} chests to open`}>
               <motion.span animate={{ rotate: [0, -12, 12, -6, 0] }} transition={{ repeat: Infinity, duration: 1.6, repeatDelay: 1.2 }} className="block">
                 <Gift size={16} />
               </motion.span>

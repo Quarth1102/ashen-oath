@@ -42,7 +42,7 @@ interface Store extends GameState {
   processDay: () => void;
   resolveReview: (done: string[]) => void;
 
-  buy: (itemId: string) => void;
+  equipRankSet: () => void;
   equip: (itemId: string) => void;
   unequip: (slot: Slot) => void;
   openChest: () => void;
@@ -113,7 +113,7 @@ export const useGame = create<Store>()(
       processDay: () => getState().run((s, c) => E.processDay(s, c)),
       resolveReview: (done) => getState().run((s, c) => E.resolveReview(s, done, c)),
 
-      buy: (id) => getState().run((s, c) => E.buyItem(s, id, c)),
+      equipRankSet: () => getState().run((s, c) => E.equipRankSet(s, c)),
       equip: (id) => getState().run((s, c) => E.equip(s, id, c)),
       unequip: (slot) => getState().run((s, c) => E.unequip(s, slot, c)),
       openChest: () => getState().run((s, c) => E.openChest(s, c)),
