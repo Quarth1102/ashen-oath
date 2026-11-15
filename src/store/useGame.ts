@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { del, get, set } from 'idb-keyval';
 import * as E from '../game/engine';
+import type { CampState, PetId, UpgradeLineId } from '../data/camp';
 import type { Ctx, GameEvent, GameState, Goal, Habit, Settings, Slot, StatDef, Todo, Hero } from '../game/types';
 
 const idbStorage: StateStorage = {
@@ -51,6 +52,11 @@ interface Store extends GameState {
   removeStat: (id: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   toggleCollapsed: (key: string) => void;
+  startVacation: (until?: string) => void;
+  endVacation: () => void;
+  buyUpgrade: (line: UpgradeLineId) => void;
+  buyPet: (pet: PetId) => void;
+  customizeCamp: (patch: Partial<Pick<CampState, 'tentColor' | 'bannerColor' | 'sigil' | 'fire' | 'pet'>>) => void;
 
   exportData: () => string;
   importData: (json: string) => boolean;
@@ -61,6 +67,8 @@ const pickState = (s: Store): GameState => ({
   version: s.version, hero: s.hero, statDefs: s.statDefs, habits: s.habits, todos: s.todos, goals: s.goals,
   log: s.log, achievements: s.achievements, settings: s.settings, lastProcessedDay: s.lastProcessedDay, pendingReview: s.pendingReview ?? null,
   pendingChests: s.pendingChests, dayActivity: s.dayActivity, counters: s.counters,
+  dayXp: s.dayXp, dayGold: s.dayGold, dayStats: s.dayStats, perfectDays: s.perfectDays, vacationDays: s.vacationDays,
+  combo: s.combo, camp: s.camp, lastRecapWeek: s.lastRecapWeek,
 });
 
 const upsert = <T extends { id: string }>(list: T[], item: T) =>
@@ -114,6 +122,11 @@ export const useGame = create<Store>()(
       updateStat: (id, patch) => getState().run((s, c) => E.updateStat(s, id, patch, c)),
       removeStat: (id) => getState().run((s, c) => E.removeStat(s, id, c)),
       updateSettings: (patch) => setState((s) => ({ settings: { ...s.settings, ...patch } })),
+      startVacation: (until) => getState().run((s, c) => E.startVacation(s, until, c)),
+      endVacation: () => getState().run((s, c) => E.endVacation(s, c)),
+      buyUpgrade: (line) => getState().run((s, c) => E.buyUpgrade(s, line, c)),
+      buyPet: (pet) => getState().run((s, c) => E.buyPet(s, pet, c)),
+      customizeCamp: (patch) => getState().run((s, c) => E.customizeCamp(s, patch, c)),
       toggleCollapsed: (key) =>
         setState((s) => {
           const c = new Set(s.settings.collapsed ?? []);

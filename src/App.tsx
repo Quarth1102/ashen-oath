@@ -2,6 +2,8 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from './store/useGame';
 import { useDailyReset } from './hooks';
+import { useEffect } from 'react';
+import { unlockAudio } from './audio/sound';
 import { BottomNav, Hud, SideRail } from './components/Chrome';
 import EventLayer from './components/EventLayer';
 import ReviewModal from './components/ReviewModal';
@@ -12,6 +14,7 @@ import Hero from './pages/Hero';
 import Market from './pages/Market';
 import Chronicle from './pages/Chronicle';
 import Settings from './pages/Settings';
+import CampBuild from './pages/CampBuild';
 
 function Splash() {
   return (
@@ -28,6 +31,15 @@ export default function App() {
   const hasHero = useGame((s) => !!s.hero);
   const location = useLocation();
   useDailyReset();
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
 
   if (!hydrated) return <Splash />;
   if (!hasHero) return <Onboarding />;
@@ -53,6 +65,7 @@ export default function App() {
               <Routes location={location}>
                 <Route path="/" element={<Camp />} />
                 <Route path="/quests" element={<Quests />} />
+                <Route path="/camp" element={<CampBuild />} />
                 <Route path="/hero" element={<Hero />} />
                 <Route path="/market" element={<Market />} />
                 <Route path="/chronicle" element={<Chronicle />} />

@@ -7,13 +7,15 @@ import { ACHIEVEMENT_BY_ID } from '../data/achievements';
 import { REGION_BY_ID } from '../data/regions';
 import { GEAR_BY_ID, RARITY_COLOR, SLOT_NAME } from '../data/gear';
 import { useHeroClass } from '../hooks';
+import { buzz, playChime, playLevelUp, playPerfectDay } from '../audio/sound';
+import WeeklyRecapView from './WeeklyRecap';
 import { resolveClass, CLASS_BONUS } from '../game/classes';
 import HeroSprite from './HeroSprite';
 import Landscape from './Landscape';
 import { Icon } from './Icon';
 import { rgba } from '../art/color';
 
-const MODAL_TYPES = ['fall', 'dayreport', 'levelup', 'classchange', 'region', 'goal', 'loot'] as const;
+const MODAL_TYPES = ['fall', 'dayreport', 'levelup', 'classchange', 'perfectday', 'region', 'goal', 'loot', 'weeklyrecap'] as const;
 type ModalEvent = Extract<GameEvent, { type: (typeof MODAL_TYPES)[number] }>;
 const TOAST_TYPES = ['achievement', 'statup', 'chest', 'damage'] as const;
 
@@ -21,9 +23,36 @@ export default function EventLayer() {
   const events = useGame((s) => s.events);
   const dismiss = useGame((s) => s.dismissEvent);
 
-  // reward events are rendered inline by the cards; drop them right away
+  // sound effects and haptics, once per event
+  const played = useRef(new Set<string>());
   useEffect(() => {
-    events.filter((e) => e.type === 'reward').forEach((e) => dismiss(e.id));
+    const { settings, combo } = useGame.getState();
+    const sfx = settings.sound !== false;
+    const haptic = settings.haptics !== false;
+    const fresh = events.filter((e) => !played.current.has(e.id));
+    if (!fresh.length) return;
+    fresh.forEach((e) => played.current.add(e.id));
+    const has = (t: GameEvent['type']) => fresh.some((e) => e.type === t);
+    const deed = fresh.some((e) => e.type === 'reward' && e.source !== 'Perfect Day');
+    const step = combo && Date.now() - combo.lastTs < 2000 ? combo.count - 1 : 0;
+    if (deed) {
+      if (sfx) playChime(step);
+      if (haptic) buzz(step >= 2 ? [12, 40, 12] : 14);
+    }
+    if (has('levelup')) {
+      if (sfx) setTimeout(playLevelUp, deed ? 350 : 0);
+      if (haptic) setTimeout(() => buzz([30, 60, 30, 60, 90]), 350);
+    }
+    if (has('perfectday')) {
+      if (sfx) setTimeout(playPerfectDay, 500);
+      if (haptic) setTimeout(() => buzz([20, 50, 20, 50, 20, 50, 140]), 500);
+    }
+    if (has('damage') && haptic) buzz([60, 40, 60]);
+  }, [events]);
+
+  // reward and combo events are rendered inline by the cards and the combo meter; drop them right away
+  useEffect(() => {
+    events.filter((e) => e.type === 'reward' || e.type === 'combo').forEach((e) => dismiss(e.id));
     // a fall makes the damage toasts that caused it redundant
     if (events.some((e) => e.type === 'fall')) events.filter((e) => e.type === 'damage').forEach((e) => dismiss(e.id));
   }, [events, dismiss]);
@@ -142,6 +171,30 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
           <button className="btn-primary mt-6 w-full" onClick={onClose} autoFocus>Onward</button>
         </>
       );
+      break;
+    case 'perfectday':
+      content = (
+        <>
+          <Rays color={tone} />
+          <motion.div
+            initial={{ scale: 3, rotate: -30, opacity: 0 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 180, damping: 12, delay: 0.1 }}
+            className="relative grid h-28 w-28 place-items-center rounded-full border-4 border-ember-light bg-gradient-to-b from-ember to-ember-dark shadow-[0_0_40px_rgba(224,163,58,.7)]"
+          >
+            <div className="absolute inset-2 rounded-full border-2 border-dashed border-ember-light/60" />
+            <Sparkles size={44} className="text-void" />
+          </motion.div>
+          <h2 className="h-display mt-5 text-3xl font-black text-ember-light">Perfect Day</h2>
+          <p className="mt-2 text-sm text-bone-dim">Every deed kept. The fire roars in your honour.</p>
+          <p className="mt-1 text-sm font-semibold text-ember-light">+{event.xp} XP, spread across all your stats</p>
+          <HeroSprite look={look} size={112} aura={aura} celebrate={event.id} className="mt-3" />
+          <button className="btn-primary mt-5 w-full" onClick={onClose} autoFocus>Onward</button>
+        </>
+      );
+      break;
+    case 'weeklyrecap':
+      content = <WeeklyRecapView week={event.week} onClose={onClose} />;
       break;
     case 'classchange': {
       const from = resolveClass(event.from, defs);
@@ -281,7 +334,7 @@ function Modal({ event, onClose }: { event: ModalEvent; onClose: () => void }) {
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-        className="panel relative flex w-full max-w-sm flex-col items-center overflow-hidden px-6 py-8 text-center"
+        className="panel relative flex max-h-[calc(100dvh-3rem)] w-full max-w-sm flex-col items-center overflow-y-auto overflow-x-hidden px-6 py-8 text-center"
         style={{ borderColor: rgba(tone, 0.5) }}
       >
         {content}

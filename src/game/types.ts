@@ -1,3 +1,5 @@
+import type { CampState } from '../data/camp';
+
 export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard';
 export type Slot = 'helm' | 'armor' | 'cloak' | 'weapon';
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
@@ -165,6 +167,12 @@ export interface Settings {
   reviewMissed?: boolean;
   /** ids of collapsed list sections, e.g. "quests:habit:strength" */
   collapsed?: string[];
+  /** vacation mode: no penalties, reviews or streak changes from `since` (to `until`, if set) */
+  vacation?: { since: string; until?: string } | null;
+  sound?: boolean; // sound effects (default on)
+  ambient?: boolean; // ambient camp sounds (default on)
+  volume?: number; // 0..1, ambient volume
+  haptics?: boolean; // vibration (default on)
   regionId: string | null; // null = follow highest unlocked region
 }
 
@@ -193,6 +201,19 @@ export interface GameState {
   pendingReview?: Review | null;
   pendingChests: number;
   dayActivity: Record<string, number>;
+  /** per-day totals, for the weekly chronicle */
+  dayXp?: Record<string, number>;
+  dayGold?: Record<string, number>;
+  dayStats?: Record<string, Record<string, number>>;
+  /** days where every due habit was done, with the bonus granted (so it can be revoked on undo) */
+  perfectDays?: Record<string, Reward>;
+  /** days spent in vacation mode */
+  vacationDays?: Record<string, true>;
+  /** consecutive quick completions */
+  combo?: { count: number; lastTs: number };
+  camp?: CampState;
+  /** Monday of the week the last weekly recap was shown for */
+  lastRecapWeek?: string;
   counters: Counters;
 }
 
@@ -208,7 +229,10 @@ export type GameEvent =
   | { id: string; type: 'loot'; rarity: Rarity; itemId?: string; gold?: number }
   | { id: string; type: 'goal'; goalId: string; title?: string }
   | { id: string; type: 'dayreport'; missed: string[]; damage: number; days: number }
-  | { id: string; type: 'classchange'; from: string; to: string; kit: string[] };
+  | { id: string; type: 'classchange'; from: string; to: string; kit: string[] }
+  | { id: string; type: 'combo'; count: number }
+  | { id: string; type: 'perfectday'; xp: number }
+  | { id: string; type: 'weeklyrecap'; week: string };
 
 export type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 export type NewEvent = DistributiveOmit<GameEvent, 'id'>;

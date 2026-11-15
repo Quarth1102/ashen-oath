@@ -2,13 +2,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'framer-motion';
 import HeroSprite from './HeroSprite';
 import type { SpriteLook } from '../art/sprite';
-import { bedroll, campfire, embers, pond, tent, type Strip } from '../art/props';
+import { banner, bedroll, campfire, dock, embers, lanternPost, pet, pond, rack, tent, type Strip } from '../art/props';
+import { DEFAULT_CAMP, FIRE_COLORS, tierOf, type CampState } from '../data/camp';
 import type { Region } from '../data/regions';
 import type { Activity } from '../game/activity';
+export type SceneActivity = Activity | 'away';
 
 interface Props {
   look: SpriteLook;
-  activity: Activity;
+  activity: SceneActivity;
   region: Region;
   /** ground offset and landscape scale, from <Landscape> */
   ground: number;
@@ -17,10 +19,13 @@ interface Props {
   zoom?: number;
   aura?: string;
   celebrate?: number | string;
+  camp?: CampState;
+  /** today was a perfect day: the fire roars */
+  perfect?: boolean;
 }
 
 /** A prop strip rendered at sprite-pixel scale, animated if it has frames. */
-function Prop({ strip, u, style, speed = 0.5 }: { strip: Strip; u: number; style?: CSSProperties; speed?: number }) {
+export function Prop({ strip, u, style, speed = 0.5 }: { strip: Strip; u: number; style?: CSSProperties; speed?: number }) {
   const n = strip.frames;
   return (
     <div
@@ -41,27 +46,66 @@ function Prop({ strip, u, style, speed = 0.5 }: { strip: Strip; u: number; style
 /** Places something centred at x (sprite px from the middle) with its bottom at `bottom` px. */
 const at = (x: number, w: number, u: number, bottom: number): CSSProperties => ({ left: `calc(50% + ${(x - w / 2) * u}px)`, bottom });
 
-export default function HeroScene({ look, activity, region, ground, scale, zoom = 1.15, aura, celebrate }: Props) {
+export default function HeroScene({ look, activity, region, ground, scale, zoom = 1.15, aura, celebrate, camp = DEFAULT_CAMP, perfect = false }: Props) {
   const u = scale * zoom; // CSS px per sprite pixel
   const size = Math.round(32 * u);
   const base = ground - 4 * scale; // bottom of the hero's 32px box
   const feet = base + u; // where feet (and props) meet the ground
+
+  // the camp's built pieces
+  const tentTier = tierOf(camp, 'tent');
+  const tentStrip = tent(tentTier, camp.tentColor);
+  const tentX = -16 - tentStrip.w / 2;
+  const flame = (FIRE_COLORS.find((c) => c.id === camp.fire) ?? FIRE_COLORS[0]).colors;
+  const fireStrip = campfire(tierOf(camp, 'hearth'), flame);
+  const petStrip = camp.pet ? pet(camp.pet) : null;
+  const bannerTier = tierOf(camp, 'banner');
+  const campsite = (fireX: number, lit: boolean) => (
+    <>
+      {tierOf(camp, 'lanterns') > 0 && (
+        <>
+          <Prop strip={lanternPost()} u={u} style={at(-62, 8, u, feet)} speed={0.9} />
+          <Prop strip={lanternPost()} u={u} style={at(64, 8, u, feet)} speed={1.1} />
+        </>
+      )}
+      {bannerTier > 0 && <Prop strip={banner(camp.bannerColor, camp.sigil, bannerTier)} u={u} style={at(52, 14, u, feet)} speed={0.8} />}
+      <Prop strip={tentStrip} u={u} style={at(tentX, tentStrip.w, u, feet + 3 * u)} speed={0.9} />
+      {tierOf(camp, 'rack') > 0 && <Prop strip={rack()} u={u} style={at(36, 16, u, feet + u)} />}
+      {lit ? (
+        <>
+          <FireGlow x={fireX} u={u} bottom={feet} color={flame[1]} big={perfect} />
+          <Prop strip={fireStrip} u={u} style={at(fireX, fireStrip.w, u, feet)} speed={perfect ? 0.1 : 0.16} />
+        </>
+      ) : (
+        <>
+          <FireGlow x={fireX} u={u} bottom={feet} dim color={flame[0]} />
+          <Prop strip={embers()} u={u} style={at(fireX, 14, u, feet)} speed={1.2} />
+        </>
+      )}
+    </>
+  );
+  const petAt = (x: number) => petStrip && <Prop strip={petStrip} u={u} style={at(x, petStrip.w, u, feet)} speed={0.9} />;
 
   return (
     <div className="pointer-events-none absolute inset-0">
       <AnimatePresence mode="wait">
         <motion.div key={activity} className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}>
           {activity === 'watch' && (
-            <div className="absolute" style={at(0, 32, u, base)}>
-              <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} />
-            </div>
+            <>
+              {campsite(20, true)}
+              {petAt(-26)}
+              <div className="absolute" style={at(0, 32, u, base)}>
+                <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} />
+              </div>
+            </>
           )}
+
+          {activity === 'away' && campsite(18, false)}
 
           {activity === 'camp' && (
             <>
-              <Prop strip={tent()} u={u} style={at(-30, 30, u, feet + 3 * u)} />
-              <FireGlow x={18} u={u} bottom={feet} />
-              <Prop strip={campfire()} u={u} style={at(18, 14, u, feet)} speed={0.16} />
+              {campsite(18, true)}
+              {petAt(-24)}
               <div className="absolute" style={at(-2, 32, u, base)}>
                 <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} pose="sit" />
               </div>
@@ -70,9 +114,8 @@ export default function HeroScene({ look, activity, region, ground, scale, zoom 
 
           {activity === 'sleep' && (
             <>
-              <Prop strip={tent()} u={u} style={at(-34, 30, u, feet + 3 * u)} />
-              <FireGlow x={24} u={u} bottom={feet} dim />
-              <Prop strip={embers()} u={u} style={at(24, 14, u, feet)} speed={1.2} />
+              {campsite(24, false)}
+              {petAt(15)}
               <Prop strip={bedroll()} u={u} style={at(0, 26, u, feet)} />
               <div className="absolute" style={{ ...at(1, 32, u, feet + 3 * u - 9 * u), transform: 'rotate(-90deg)' }}>
                 <HeroSprite look={look} size={size} pose="sleep" shadow={false} celebrate={celebrate} />
@@ -81,17 +124,18 @@ export default function HeroScene({ look, activity, region, ground, scale, zoom 
             </>
           )}
 
-          {activity === 'fish' && <Fishing look={look} region={region} u={u} size={size} base={base} feet={feet} aura={aura} celebrate={celebrate} />}
+          {activity === 'fish' && <Fishing look={look} region={region} u={u} size={size} base={base} feet={feet} aura={aura} celebrate={celebrate} hasDock={tierOf(camp, 'dock') > 0} petEl={petAt(-30)} />}
 
-          {activity === 'wander' && <Wander look={look} u={u} size={size} base={base} aura={aura} celebrate={celebrate} />}
+          {activity === 'wander' && <Wander look={look} u={u} size={size} base={base} aura={aura} celebrate={celebrate} petStrip={petStrip} />}
         </motion.div>
       </AnimatePresence>
     </div>
   );
 }
 
-function FireGlow({ x, u, bottom, dim = false }: { x: number; u: number; bottom: number; dim?: boolean }) {
-  const w = (dim ? 34 : 60) * u;
+function FireGlow({ x, u, bottom, dim = false, big = false, color = '#f08c32' }: { x: number; u: number; bottom: number; dim?: boolean; big?: boolean; color?: string }) {
+  const w = (dim ? 34 : big ? 96 : 60) * u;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
   return (
     <div
       className="flame absolute rounded-full mix-blend-screen"
@@ -100,7 +144,7 @@ function FireGlow({ x, u, bottom, dim = false }: { x: number; u: number; bottom:
         bottom: bottom - w * 0.3,
         width: w,
         height: w * 0.8,
-        background: `radial-gradient(circle, rgba(240,140,50,${dim ? 0.22 : 0.4}), rgba(200,64,42,${dim ? 0.08 : 0.15}) 45%, transparent 70%)`,
+        background: `radial-gradient(circle, rgba(${r},${g},${b},${dim ? 0.22 : big ? 0.6 : 0.4}), rgba(${r},${g},${b},${dim ? 0.08 : big ? 0.25 : 0.15}) 45%, transparent 70%)`,
       }}
     />
   );
@@ -125,7 +169,7 @@ function Zzz({ u, style }: { u: number; style: CSSProperties }) {
   );
 }
 
-function Fishing({ look, region, u, size, base, feet, aura, celebrate }: { look: SpriteLook; region: Region; u: number; size: number; base: number; feet: number; aura?: string; celebrate?: number | string }) {
+function Fishing({ look, region, u, size, base, feet, aura, celebrate, hasDock, petEl }: { look: SpriteLook; region: Region; u: number; size: number; base: number; feet: number; aura?: string; celebrate?: number | string; hasDock?: boolean; petEl?: React.ReactNode }) {
   const heroX = -8;
   const pondX = 34;
   // rod tip is sprite pixel (31, 9.5) in the seated pose
@@ -138,6 +182,8 @@ function Fishing({ look, region, u, size, base, feet, aura, celebrate }: { look:
   return (
     <>
       <Prop strip={pond(region)} u={u} style={at(pondX, 48, u, feet)} speed={1.4} />
+      {hasDock && <Prop strip={dock()} u={u} style={at(20, 26, u, feet + u)} />}
+      {petEl}
       {/* line: from rod tip down to the float, with a little sag */}
       <svg className="absolute overflow-visible" style={{ left: `calc(50% + ${tipX * u}px)`, bottom: bobY, width: Math.max(1, dx), height: Math.max(1, dy) }}>
         <path d={`M0,0 Q${dx * 0.6},${dy * 0.55} ${dx},${dy}`} stroke="rgba(232,223,207,.55)" strokeWidth={Math.max(1, u * 0.3)} fill="none" />
@@ -165,7 +211,7 @@ function Fishing({ look, region, u, size, base, feet, aura, celebrate }: { look:
 }
 
 /** Walks to random spots, pauses, turns around. */
-function Wander({ look, u, size, base, aura, celebrate }: { look: SpriteLook; u: number; size: number; base: number; aura?: string; celebrate?: number | string }) {
+function Wander({ look, u, size, base, aura, celebrate, petStrip }: { look: SpriteLook; u: number; size: number; base: number; aura?: string; celebrate?: number | string; petStrip?: Strip | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [moving, setMoving] = useState(false);
@@ -213,6 +259,14 @@ function Wander({ look, u, size, base, aura, celebrate }: { look: SpriteLook; u:
     <div ref={ref} className="absolute" style={at(0, 32, u, base)}>
       <motion.div animate={controls} initial={{ x: 0 }}>
         <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} pose={moving ? 'walk' : 'idle'} flip={left} />
+        {petStrip && (
+          <Prop
+            strip={petStrip}
+            u={u}
+            speed={moving ? 0.25 : 0.9}
+            style={{ left: `${(left ? 26 : -petStrip.w + 6) * u}px`, bottom: u, transform: left ? 'scaleX(-1)' : undefined, transition: 'left .4s ease' }}
+          />
+        )}
       </motion.div>
     </div>
   );

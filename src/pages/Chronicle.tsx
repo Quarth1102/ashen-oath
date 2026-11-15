@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Lock, MapPin } from 'lucide-react';
+import { Lock, MapPin, ScrollText } from 'lucide-react';
+import { recapWeeks } from '../game/recap';
+import WeeklyRecapView from '../components/WeeklyRecap';
 import { useGame } from '../store/useGame';
 import { useRegion, useToday } from '../hooks';
 import { ACHIEVEMENTS } from '../data/achievements';
@@ -9,14 +11,15 @@ import { regionLayers } from '../art/landscape';
 import { addDays, weekStart, parseDay } from '../game/dates';
 import { activeStreak } from '../game/streaks';
 import { Icon } from '../components/Icon';
-import { PageHeader } from '../components/ui';
+import { PageHeader, Sheet } from '../components/ui';
 
-type Tab = 'deeds' | 'calendar' | 'journey' | 'log';
+type Tab = 'deeds' | 'calendar' | 'weeks' | 'journey' | 'log';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'deeds', label: 'Feats' },
   { id: 'calendar', label: 'Calendar' },
   { id: 'journey', label: 'Journey' },
   { id: 'log', label: 'Log' },
+  { id: 'weeks', label: 'Weeks' },
 ];
 
 function RegionThumb({ r, dim }: { r: Region; dim?: boolean }) {
@@ -36,6 +39,8 @@ export default function Chronicle() {
   const today = useToday();
   const current = useRegion();
   const [tab, setTab] = useState<Tab>('deeds');
+  const [openWeek, setOpenWeek] = useState<string | null>(null);
+  const pastWeeks = useMemo(() => recapWeeks(s, weekStart(today)), [s, today]);
   const unlocked = Object.keys(s.achievements).length;
 
   const weeks = 17;
@@ -46,7 +51,7 @@ export default function Chronicle() {
     { label: 'Deeds done', value: s.counters.completions },
     { label: 'Best streak', value: s.habits.reduce((m, h) => Math.max(m, h.bestStreak), 0) },
     { label: 'Days active', value: Object.keys(s.dayActivity).length },
-    { label: 'Current run', value: activeStreak(s.dayActivity, today) },
+    { label: 'Current run', value: activeStreak(s.dayActivity, today, s.vacationDays) },
     { label: 'Quests won', value: s.counters.goalsDone },
     { label: 'Falls', value: s.counters.falls },
   ];
@@ -121,8 +126,10 @@ export default function Chronicle() {
                             animate={{ scale: 1 }}
                             transition={{ delay: (w * 7 + d) * 0.003 }}
                             title={`${day}: ${n} deeds`}
-                            className={`h-3.5 w-3.5 rounded-[3px] ${day === today ? 'ring-1 ring-bone/70' : ''}`}
-                            style={{ background: future ? 'transparent' : n ? `rgba(224,163,58,${0.25 + k * 0.75})` : '#27212d' }}
+                            className={`h-3.5 w-3.5 rounded-[3px] ${day === today ? 'ring-1 ring-bone/70' : s.perfectDays?.[day] ? 'ring-2 ring-ember-light shadow-glow' : ''}`}
+                            style={{
+                              background: future ? 'transparent' : n ? `rgba(224,163,58,${0.25 + k * 0.75})` : s.vacationDays?.[day] ? 'rgba(95,209,193,.25)' : '#27212d',
+                            }}
                           />
                         );
                       })}
@@ -130,7 +137,7 @@ export default function Chronicle() {
                   );
                 })}
               </div>
-              <p className="mt-3 text-xs text-bone-faint">Each ember is a day you kept your oath.</p>
+              <p className="mt-3 text-xs text-bone-faint">Each ember is a day you kept your oath. A gold ring seals a perfect day; teal marks days away on a journey.</p>
             </div>
           )}
 
@@ -165,6 +172,28 @@ export default function Chronicle() {
             </ol>
           )}
 
+          {tab === 'weeks' && (
+            <div className="space-y-2">
+              {pastWeeks.length === 0 && <p className="panel-inset p-4 text-sm text-bone-faint">Your first weekly chronicle is written when this week ends.</p>}
+              {pastWeeks.map((w) => {
+                const xp = Array.from({ length: 7 }, (_, i) => s.dayXp?.[addDays(w, i)] ?? 0).reduce((a, b) => a + b, 0);
+                const perfect = Array.from({ length: 7 }, (_, i) => s.perfectDays?.[addDays(w, i)]).filter(Boolean).length;
+                return (
+                  <button key={w} onClick={() => setOpenWeek(w)} className="panel flex w-full items-center gap-3 p-3 text-left hover:brightness-110">
+                    <ScrollText size={20} className="shrink-0 text-ember-light" />
+                    <span className="flex-1">
+                      <span className="block font-display font-bold">
+                        Week of {parseDay(w).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                      <span className="text-xs text-bone-faint">{xp} XP · {perfect} perfect day{perfect === 1 ? '' : 's'}</span>
+                    </span>
+                    <span className="text-bone-faint">›</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {tab === 'log' && (
             <ul className="panel divide-y divide-ash-600/40">
               {s.log.length === 0 && <li className="p-4 text-sm text-bone-faint">Nothing written yet.</li>}
@@ -179,6 +208,9 @@ export default function Chronicle() {
           )}
         </motion.div>
       </AnimatePresence>
+      <Sheet open={!!openWeek} onClose={() => setOpenWeek(null)} title="Weekly Chronicle">
+        {openWeek && <WeeklyRecapView week={openWeek} />}
+      </Sheet>
     </div>
   );
 }

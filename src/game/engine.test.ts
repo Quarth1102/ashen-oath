@@ -28,6 +28,9 @@ function withHeroBase(): GameState {
 
 const withHero = withHeroBase;
 
+/** An extra due habit that is never completed, so tests aren't affected by the Perfect Day bonus. */
+const blockPerfect = (s: GameState) => addHabit(s, { title: 'blocker' });
+
 function addHabit(s: GameState, p: Parameters<typeof E.makeHabit>[0]) {
   const h = E.makeHabit(p, E.today(s, NOON));
   s.habits.push(h);
@@ -119,6 +122,7 @@ describe('earned classes', () => {
     s.hero!.level = 2;
     s.hero!.xp = 140; // one hard deed away from level 3 (needs 141)
     const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['strength'] });
+    blockPerfect(s);
     const r = E.completeHabit(s, id, ctx());
     s = r.state;
     expect(s.hero!.level).toBe(3);
@@ -150,6 +154,7 @@ describe('completing habits', () => {
   it('grants xp split across stats, gold, and can be undone exactly', () => {
     let s = withHero();
     const id = addHabit(s, { title: 'Run', difficulty: 'medium', statIds: ['strength', 'vitality'] });
+    blockPerfect(s);
     const r = E.completeHabit(s, id, ctx());
     s = r.state;
     expect(s.hero!.xp).toBe(20);
@@ -186,6 +191,7 @@ describe('completing habits', () => {
     s.hero!.inventory.push('helm-iron');
     s = E.equip(s, 'helm-iron', ctx()).state; // +8% strength
     const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['strength'] });
+    blockPerfect(s);
     s = E.completeHabit(s, id, ctx()).state;
     expect(totalStatXp(s.hero!.stats.strength)).toBe(Math.round(40 * 1.08));
   });
@@ -297,7 +303,7 @@ describe('todos & goals', () => {
     s.goals.push(g);
     s = E.toggleMilestone(s, g.id, 'm1', ctx()).state;
     expect(s.goals[0].done).toBe(false);
-    const r = E.toggleMilestone(s, g.id, 'm2', ctx());
+    const r = E.toggleMilestone(s, g.id, 'm2', ctx(at(NOON, 0, 1))); // an hour later: no combo
     s = r.state;
     expect(s.goals[0].done).toBe(true);
     expect(s.hero!.titles).toContain('the Swift');
@@ -425,7 +431,8 @@ describe('repeatable habits', () => {
   it('logs up to the daily limit, each with a full reward, streak counted once', () => {
     let s = withHero();
     const id = addHabit(s, { title: 'Exercise 30 min', difficulty: 'medium', perDay: 3 });
-    for (let i = 0; i < 4; i++) s = E.completeHabit(s, id, ctx()).state; // 4th is over the limit
+    blockPerfect(s);
+    for (let i = 0; i < 4; i++) s = E.completeHabit(s, id, ctx(at(NOON, 0, i))).state; // hours apart (no combo); 4th is over the limit
     const h = s.habits[0];
     expect(E.logsOn(h, '2026-11-11')).toBe(3);
     expect(h.extra!['2026-11-11']).toHaveLength(2);
@@ -452,8 +459,9 @@ describe('repeatable habits', () => {
   it('undoes the most recent log first', () => {
     let s = withHero();
     const id = addHabit(s, { title: 'Exercise', difficulty: 'medium', perDay: 0 });
+    blockPerfect(s);
     s = E.completeHabit(s, id, ctx()).state;
-    s = E.completeHabit(s, id, ctx()).state;
+    s = E.completeHabit(s, id, ctx(at(NOON, 0, 1))).state;
     s = E.uncompleteHabit(s, id, ctx()).state;
     expect(E.logsOn(s.habits[0], '2026-11-11')).toBe(1);
     expect(s.habits[0].streak).toBe(1);
@@ -531,5 +539,124 @@ describe('paused habits & grouping', () => {
       ['wisdom', ['a', 'd']],
       ['untagged', ['b']],
     ]);
+  });
+});
+
+describe('combos', () => {
+  it('builds within 5 minutes, adds up to +25% XP, and resets after a gap', () => {
+    let s = withHero();
+    blockPerfect(s);
+    const ids = Array.from({ length: 8 }, (_, i) => addHabit(s, { title: `h${i}`, difficulty: 'medium', days: [] }));
+    const xps: number[] = [];
+    ids.slice(0, 7).forEach((id, i) => {
+      const before = s.hero!.totalXp;
+      const r = E.completeHabit(s, id, ctx(new Date(NOON.getTime() + i * 60_000)));
+      s = r.state;
+      xps.push(s.hero!.totalXp - before);
+    });
+    expect(xps).toEqual([20, 21, 22, 23, 24, 25, 25]);
+    expect(s.combo!.count).toBe(7);
+    const before = s.hero!.totalXp;
+    s = E.completeHabit(s, ids[7], ctx(new Date(NOON.getTime() + 20 * 60_000))).state;
+    expect(s.hero!.totalXp - before).toBe(20);
+    expect(s.combo!.count).toBe(1);
+  });
+});
+
+describe('perfect day', () => {
+  it('grants 50 XP spread over every stat once all due habits are done, and revokes on undo', () => {
+    let s = withHero();
+    const a = addHabit(s, { title: 'A', statIds: ['strength'] });
+    const b = addHabit(s, { title: 'B', statIds: ['wisdom'] });
+    addHabit(s, { title: 'Optional', days: [] }); // no-penalty habits don't count
+    s = E.completeHabit(s, a, ctx()).state;
+    expect(s.perfectDays?.['2026-11-11']).toBeUndefined();
+    const r = E.completeHabit(s, b, ctx(at(NOON, 0, 1)));
+    s = r.state;
+    const pd = s.perfectDays!['2026-11-11'];
+    expect(pd).toBeTruthy();
+    expect(Object.keys(pd.stats).sort()).toEqual(DEFAULT_STATS.map((d) => d.id).sort());
+    expect(Object.values(pd.stats).reduce((x, y) => x + y, 0)).toBe(50);
+    expect(r.events.some((e) => e.type === 'perfectday')).toBe(true);
+    expect(s.counters.completions).toBe(2); // the bonus isn't a deed
+    const xp = s.hero!.totalXp;
+    s = E.uncompleteHabit(s, b, ctx(at(NOON, 0, 1))).state;
+    expect(s.perfectDays!['2026-11-11']).toBeUndefined();
+    expect(s.hero!.totalXp).toBe(xp - 50 - 10);
+  });
+});
+
+describe('vacation mode', () => {
+  it('skips penalties, reviews and streak changes, then ends by itself', () => {
+    let s = withHero();
+    addHabit(s, { title: 'Run', difficulty: 'hard', streak: 4, bestStreak: 4 });
+    s = E.startVacation(s, '2026-11-13', ctx()).state;
+    let r = E.processDay(s, ctx(at(NOON, 2))); // 13th: still on vacation
+    expect(r.state.pendingReview ?? null).toBeNull();
+    expect(r.state.hero!.hp).toBe(s.hero!.maxHp);
+    expect(r.state.habits[0].streak).toBe(4);
+    expect(r.state.settings.vacation).toBeTruthy();
+    r = E.processDay(r.state, ctx(at(NOON, 3))); // 14th: the 13th is skipped, vacation over
+    expect(r.state.settings.vacation).toBeNull();
+    expect(r.state.vacationDays?.['2026-11-13']).toBe(true);
+    expect(r.state.hero!.hp).toBe(s.hero!.maxHp);
+  });
+
+  it('protects today when ended early and keeps the active streak whole', () => {
+    let s = withHero();
+    s = E.startVacation(s, undefined, ctx()).state;
+    s = E.endVacation(s, ctx()).state;
+    expect(s.settings.vacation).toBeNull();
+    expect(s.vacationDays?.['2026-11-11']).toBe(true);
+    expect(activeStreak({ '2026-11-09': 1, '2026-11-12': 1 }, '2026-11-12', { '2026-11-10': true, '2026-11-11': true })).toBe(2);
+  });
+});
+
+describe('camp', () => {
+  it('buys upgrade tiers in order, applying perks', () => {
+    let s = withHero();
+    s.hero!.gold = 1000;
+    s = E.buyUpgrade(s, 'tent', ctx()).state;
+    expect(s.camp!.tiers.tent).toBe(1);
+    expect(s.hero!.maxHp).toBe(55);
+    expect(s.hero!.hp).toBe(55);
+    // pavilion needs level 5
+    expect(E.buyUpgrade(s, 'tent', ctx()).state.camp!.tiers.tent).toBe(1);
+    s = E.buyUpgrade(s, 'banner', ctx()).state;
+    blockPerfect(s);
+    const id = addHabit(s, { title: 'x', difficulty: 'medium' });
+    const g = s.hero!.gold;
+    s = E.completeHabit(s, id, ctx()).state;
+    expect(s.hero!.gold - g).toBe(Math.round(10 * 1.05) + 10); // +5% gold, plus First Blood
+  });
+
+  it('adopts pets and customises', () => {
+    let s = withHero();
+    s.hero!.gold = 500;
+    s = E.buyPet(s, 'raven', ctx()).state;
+    expect(s.camp!.pet).toBe('raven');
+    s = E.customizeCamp(s, { tentColor: '#2a3a5a', pet: 'cat' }, ctx()).state; // cat not owned: ignored
+    expect(s.camp!.tentColor).toBe('#2a3a5a');
+    expect(s.camp!.pet).toBe('raven');
+  });
+});
+
+describe('weekly recap', () => {
+  it('summarises a week and is offered when a new week starts', async () => {
+    const { weekRecap } = await import('./recap');
+    let s = withHero(); // created Wed 11 Nov
+    s.settings.reviewMissed = false;
+    const id = addHabit(s, { title: 'Read', statIds: ['intellect'] });
+    s = E.completeHabit(s, id, ctx()).state;
+    s = E.processDay(s, ctx(at(NOON, 1))).state;
+    s = E.completeHabit(s, id, ctx(at(NOON, 1))).state;
+    const r = E.processDay(s, ctx(new Date(2026, 10, 16, 12))); // Monday
+    const ev = r.events.find((e) => e.type === 'weeklyrecap');
+    expect(ev && ev.type === 'weeklyrecap' && ev.week).toBe('2026-11-09');
+    const rec = weekRecap(r.state, '2026-11-09');
+    expect(rec.deeds).toBe(2);
+    expect(rec.perfectDays).toEqual(['2026-11-11', '2026-11-12']);
+    expect(rec.stats[0].id).toBe('intellect');
+    expect(rec.habits[0]).toMatchObject({ title: 'Read', done: 2, due: 5 }); // Wed–Sun
   });
 });

@@ -21,7 +21,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'streak_3', name: 'Kindled', desc: 'Reach a 3-day habit streak.', icon: 'flame', gold: 15, check: (s) => bestHabitStreak(s) >= 3 },
   { id: 'streak_7', name: 'Week of Iron', desc: 'Reach a 7-day habit streak.', icon: 'flame', gold: 40, title: 'the Steadfast', check: (s) => bestHabitStreak(s) >= 7 },
   { id: 'streak_30', name: 'Moon’s Turning', desc: 'Reach a 30-day habit streak.', icon: 'moon', gold: 200, title: 'the Relentless', check: (s) => bestHabitStreak(s) >= 30 },
-  { id: 'active_7', name: 'Hearthkeeper', desc: 'Be active 7 days in a row.', icon: 'tent', gold: 40, check: (s, t) => activeStreak(s.dayActivity, t) >= 7 },
+  { id: 'active_7', name: 'Hearthkeeper', desc: 'Be active 7 days in a row.', icon: 'tent', gold: 40, check: (s, t) => activeStreak(s.dayActivity, t, s.vacationDays) >= 7 },
   { id: 'level_5', name: 'Into the Gloom', desc: 'Reach level 5.', icon: 'trees', gold: 50, check: (s) => (s.hero?.level ?? 0) >= 5 },
   { id: 'level_10', name: 'Marsh-Wader', desc: 'Reach level 10.', icon: 'waves', gold: 100, title: 'the Tested', check: (s) => (s.hero?.level ?? 0) >= 10 },
   { id: 'level_20', name: 'Under the Blood Moon', desc: 'Reach level 20.', icon: 'church', gold: 250, check: (s) => (s.hero?.level ?? 0) >= 20 },
@@ -34,6 +34,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'fallen', name: 'Risen from Ash', desc: 'Fall in battle and rise again.', icon: 'skull', gold: 25, title: 'the Twice-Born', check: (s) => s.counters.falls >= 1 },
   { id: 'shopper', name: 'Coin Well Spent', desc: 'Buy something from the Market.', icon: 'coins', gold: 10, check: (s) => s.counters.purchases >= 1 },
   { id: 'collector', name: 'Hoarder', desc: 'Own 12 pieces of gear.', icon: 'package', gold: 150, check: (s) => (s.hero?.inventory.length ?? 0) >= 12 },
+  { id: 'perfect_1', name: 'Flawless', desc: 'Complete every due habit in a day.', icon: 'sparkles', gold: 25, check: (s) => Object.keys(s.perfectDays ?? {}).length >= 1 },
+  { id: 'perfect_7', name: 'Seven Seals', desc: 'Earn 7 perfect days.', icon: 'gem', gold: 150, title: 'the Flawless', check: (s) => Object.keys(s.perfectDays ?? {}).length >= 7 },
+  { id: 'combo_5', name: 'Chain of Deeds', desc: 'Reach a ×5 combo.', icon: 'flame', gold: 30, check: (s) => (s.combo?.count ?? 0) >= 5 },
+  { id: 'builder', name: 'Camp-Builder', desc: 'Make 5 camp upgrades.', icon: 'tent', gold: 100, title: 'the Builder', check: (s) => Object.values(s.camp?.tiers ?? {}).reduce((a, b) => a + (b ?? 0), 0) >= 5 },
   { id: 'chest_1', name: 'Lucky Find', desc: 'Open a loot chest.', icon: 'gift', gold: 10, check: (s) => s.counters.chestsOpened >= 1 },
 ];
 

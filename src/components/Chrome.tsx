@@ -1,15 +1,17 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Coins, Gift, ListChecks, Scroll, Settings, Shield, Store, Tent } from 'lucide-react';
+import { Coins, Flame, Gift, ListChecks, Scroll, Settings, Shield, Store, Tent } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import { heroXpToNext } from '../game/xp';
 import { Bar } from './ui';
+import ComboMeter from './ComboMeter';
 import HeroSprite from './HeroSprite';
 import { useHeroClass, useHeroLook } from '../hooks';
 
 export const NAV = [
-  { to: '/', label: 'Camp', icon: Tent },
+  { to: '/', label: 'Today', icon: Flame },
   { to: '/quests', label: 'Quests', icon: ListChecks },
+  { to: '/camp', label: 'Camp', icon: Tent },
   { to: '/hero', label: 'Hero', icon: Shield },
   { to: '/market', label: 'Market', icon: Store },
   { to: '/chronicle', label: 'Chronicle', icon: Scroll },
@@ -54,6 +56,7 @@ export function Hud() {
           <Bar value={hero.xp} max={need} color="#e0a33a" className="flex-1" height={7} glow />
           <span className="w-14 text-right text-[10px] font-medium text-bone-dim tabular-nums" data-testid="hud-xp">{hero.xp}/{need}</span>
         </div>
+        <ComboMeter />
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         <NavLink to="/market" className="flex items-center gap-1 rounded-full bg-ember-dark/30 px-2 py-0.5 font-pixel text-sm text-ember-light ring-1 ring-ember/30" data-testid="hud-gold">

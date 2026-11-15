@@ -14,6 +14,7 @@ import { GEAR, GEAR_BY_ID } from '../data/gear';
 import { classBonus, determineClassId, normalizeClassId, resolveClass, CLASS_UNLOCK_LEVEL } from './classes';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { regionsUnlockedBetween } from '../data/regions';
+import { DEFAULT_CAMP, PET_BY_ID, UPGRADE_BY_ID, campPerks, tierOf, type CampState, type PetId, type UpgradeLineId } from '../data/camp';
 import { DEFAULT_STATS } from '../data/stats';
 
 export interface Result {
@@ -94,7 +95,7 @@ function applyHeroXp(tx: Tx, amount: number): number {
   hero.level = r.level;
   hero.xp = r.xp;
   hero.totalXp = Math.max(0, hero.totalXp + amount);
-  hero.maxHp = maxHpFor(hero.level);
+  hero.maxHp = maxHpFor(hero.level) + campPerks(tx.s.camp).maxHp;
   if (r.gained > 0) {
     hero.hp = hero.maxHp; // a level-up restores you fully
     tx.emit({ type: 'levelup', level: hero.level, maxHp: hero.maxHp });
@@ -145,8 +146,34 @@ function applyStatXp(tx: Tx, statId: string, amount: number) {
   if (r.gained > 0) tx.emit({ type: 'statup', statId, level: r.level });
 }
 
-function grantReward(tx: Tx, base: number, statIds: string[], source: string, hpRegen = 0, day = tx.today): Reward {
+export const COMBO_WINDOW_MS = 5 * 60_000;
+export const COMBO_STEP = 0.05;
+export const COMBO_MAX_STEPS = 5; // up to +25% XP
+export const comboBonus = (count: number) => Math.min(Math.max(count - 1, 0), COMBO_MAX_STEPS) * COMBO_STEP;
+
+interface GrantOpts {
+  regen?: number;
+  day?: string;
+  /** a live completion: builds the combo */
+  live?: boolean;
+  /** counts as a deed (activity, completions, loot). False for bonuses. */
+  deed?: boolean;
+}
+
+function grantReward(tx: Tx, base: number, statIds: string[], source: string, opts: GrantOpts = {}): Reward {
+  const { regen = 0, day = tx.today, live = true, deed = true } = opts;
   const hero = tx.hero;
+  const perks = campPerks(tx.s.camp);
+  let mult = 1 + perks.xp;
+  if (live && deed) {
+    const now = tx.ctx.now.getTime();
+    const c = tx.s.combo;
+    const count = c && now - c.lastTs <= COMBO_WINDOW_MS ? c.count + 1 : 1;
+    tx.s.combo = { count, lastTs: now };
+    mult += comboBonus(count);
+    if (count >= 2) tx.emit({ type: 'combo', count });
+  }
+  base *= mult;
   const valid = statIds.filter((id) => tx.s.statDefs.some((d) => d.id === id));
   const stats: Record<string, number> = {};
   let total = 0;
@@ -160,7 +187,7 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, hp
   } else {
     total = Math.round(base);
   }
-  const gold = goldFor(total);
+  const gold = Math.round(goldFor(total) * (1 + perks.gold));
 
   const leveled = applyHeroXp(tx, total) > 0;
   for (const [id, gain] of Object.entries(stats)) applyStatXp(tx, id, gain);
@@ -168,34 +195,109 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, hp
   hero.gold += gold;
 
   const hpBefore = hero.hp;
-  hero.hp = Math.min(hero.maxHp, hero.hp + hpRegen);
+  hero.hp = Math.min(hero.maxHp, hero.hp + (regen > 0 ? regen + perks.regen : 0));
   const hp = hero.hp - hpBefore;
 
-  tx.s.dayActivity[day] = (tx.s.dayActivity[day] ?? 0) + 1;
-  tx.s.counters.completions++;
+  const s = tx.s;
+  (s.dayXp ??= {})[day] = (s.dayXp[day] ?? 0) + total;
+  (s.dayGold ??= {})[day] = (s.dayGold[day] ?? 0) + gold;
+  const ds = ((s.dayStats ??= {})[day] ??= {});
+  for (const [id, gain] of Object.entries(stats)) ds[id] = (ds[id] ?? 0) + gain;
 
-  if (tx.ctx.rng() < LOOT_CHANCE) {
-    tx.s.pendingChests++;
-    tx.emit({ type: 'chest' });
+  if (deed) {
+    s.dayActivity[day] = (s.dayActivity[day] ?? 0) + 1;
+    s.counters.completions++;
+    if (tx.ctx.rng() < LOOT_CHANCE) {
+      s.pendingChests++;
+      tx.emit({ type: 'chest' });
+    }
   }
   tx.emit({ type: 'reward', xp: total, gold, hp, source });
   tx.log('complete', `${source} (+${total} XP, +${gold} gold)`);
   return { xp: total, gold, hp, stats, day };
 }
 
-function revokeReward(tx: Tx, r: Reward) {
+function revokeReward(tx: Tx, r: Reward, deed = true) {
   const hero = tx.hero;
+  const s = tx.s;
   applyHeroXp(tx, -r.xp);
   for (const [id, gain] of Object.entries(r.stats)) {
     if (hero.stats[id]) applyStatXp(tx, id, -gain);
   }
   hero.gold = Math.max(0, hero.gold - r.gold);
   hero.hp = Math.max(1, hero.hp - r.hp);
-  if (tx.s.dayActivity[r.day]) {
-    tx.s.dayActivity[r.day]--;
-    if (tx.s.dayActivity[r.day] <= 0) delete tx.s.dayActivity[r.day];
+  if (s.dayXp?.[r.day]) s.dayXp[r.day] = Math.max(0, s.dayXp[r.day] - r.xp);
+  if (s.dayGold?.[r.day]) s.dayGold[r.day] = Math.max(0, s.dayGold[r.day] - r.gold);
+  const ds = s.dayStats?.[r.day];
+  if (ds) for (const [id, gain] of Object.entries(r.stats)) if (ds[id]) ds[id] = Math.max(0, ds[id] - gain);
+  if (!deed) return;
+  if (s.dayActivity[r.day]) {
+    s.dayActivity[r.day]--;
+    if (s.dayActivity[r.day] <= 0) delete s.dayActivity[r.day];
   }
-  tx.s.counters.completions = Math.max(0, tx.s.counters.completions - 1);
+  s.counters.completions = Math.max(0, s.counters.completions - 1);
+}
+
+/* ───────────────────────────── perfect day ───────────────────────────── */
+
+export const PERFECT_DAY_XP = 50;
+
+/** Daily habits with a penalty on `day` (the ones a perfect day requires). */
+export function dueOnDay(s: GameState, day: string): Habit[] {
+  return s.habits.filter(
+    (h) => h.polarity === 'good' && !h.paused && h.frequency === 'daily' && h.days.includes(weekday(day)) && h.createdDay <= day,
+  );
+}
+
+export function isPerfectDay(s: GameState, day: string): boolean {
+  const due = dueOnDay(s, day);
+  return due.length > 0 && due.every((h) => h.history[day]);
+}
+
+/** Grants (or, after an undo, revokes) today's perfect-day bonus: XP spread evenly over every stat. */
+function checkPerfectDay(tx: Tx) {
+  const s = tx.s;
+  const day = tx.today;
+  const pd = (s.perfectDays ??= {});
+  const perfect = isPerfectDay(s, day);
+  if (perfect && !pd[day]) {
+    pd[day] = grantReward(tx, PERFECT_DAY_XP, s.statDefs.map((d) => d.id), 'Perfect Day', { live: false, deed: false });
+    tx.emit({ type: 'perfectday', xp: pd[day].xp });
+  } else if (!perfect && pd[day]) {
+    revokeReward(tx, pd[day], false);
+    delete pd[day];
+  }
+}
+
+/* ───────────────────────────── vacation ───────────────────────────── */
+
+export function onVacation(s: GameState, day: string): boolean {
+  if (s.vacationDays?.[day]) return true;
+  const v = s.settings.vacation;
+  return !!v && day >= v.since && (!v.until || day <= v.until);
+}
+
+/** True if any day of the week ending on `sunday` (up to `sunday`) was a vacation day. */
+function weekTouchedByVacation(s: GameState, sunday: string): boolean {
+  for (let d = weekStart(sunday); d <= sunday; d = addDays(d, 1)) if (onVacation(s, d)) return true;
+  return false;
+}
+
+export function startVacation(state: GameState, until: string | undefined, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  tx.s.settings.vacation = { since: tx.today, until: until || undefined };
+  (tx.s.vacationDays ??= {})[tx.today] = true;
+  tx.log('system', until ? `Set out on a journey until ${until}.` : 'Set out on a journey.');
+  return tx.done();
+}
+
+export function endVacation(state: GameState, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  if (!tx.s.settings.vacation) return tx.done();
+  (tx.s.vacationDays ??= {})[tx.today] = true; // today stays protected
+  tx.s.settings.vacation = null;
+  tx.log('system', 'Returned to camp.');
+  return tx.done();
 }
 
 /** Returns true if the hero fell. */
@@ -312,6 +414,7 @@ export function createHero(state: GameState, input: NewHeroInput, ctx: Ctx): Res
     createdDay: tx.today,
   };
   tx.s.lastProcessedDay = tx.today;
+  tx.s.lastRecapWeek = weekStart(tx.today);
   if (input.starterQuests) {
     const has = (id: string) => tx.s.statDefs.some((d) => d.id === id);
     const tag = (...ids: string[]) => ids.filter(has);
@@ -361,7 +464,7 @@ export function completeHabit(state: GameState, id: string, ctx: Ctx): Result {
     if (logsOn(h, tx.today) >= dailyLimit(h)) return tx.done();
     const mult = h.frequency === 'daily' ? streakMultiplier(Math.max(0, h.streak - 1)) : 1;
     const n = logsOn(h, tx.today) + 1;
-    const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, `${h.title} ×${n}`, regenFor(h.difficulty));
+    const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, `${h.title} ×${n}`, { regen: regenFor(h.difficulty) });
     ((h.extra ??= {})[tx.today] ??= []).push(reward);
     checkAchievements(tx);
     return tx.done();
@@ -369,12 +472,13 @@ export function completeHabit(state: GameState, id: string, ctx: Ctx): Result {
   const prevStreak = h.streak;
   const prevBest = h.bestStreak;
   const mult = h.frequency === 'daily' ? streakMultiplier(h.streak) : 1;
-  const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, h.title, regenFor(h.difficulty));
+  const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, h.title, { regen: regenFor(h.difficulty) });
   if (h.frequency === 'daily') {
     h.streak++;
     h.bestStreak = Math.max(h.bestStreak, h.streak);
   }
   h.history[tx.today] = { ...reward, prevStreak, prevBest };
+  checkPerfectDay(tx);
   checkAchievements(tx);
   return tx.done();
 }
@@ -395,6 +499,7 @@ export function uncompleteHabit(state: GameState, id: string, ctx: Ctx): Result 
   h.streak = c.prevStreak;
   h.bestStreak = c.prevBest;
   delete h.history[tx.today];
+  checkPerfectDay(tx);
   return tx.done();
 }
 
@@ -455,7 +560,8 @@ export function uncompleteTodo(state: GameState, id: string, ctx: Ctx): Result {
 /* ───────────────────────────── goals ───────────────────────────── */
 
 function finishGoal(tx: Tx, g: Goal) {
-  g.reward = grantReward(tx, BASE_XP[g.difficulty] * GOAL_MULT, g.statIds, `Quest complete: ${g.title}`);
+  // finishing the quest is part of the last milestone, so it doesn't add to the combo
+  g.reward = grantReward(tx, BASE_XP[g.difficulty] * GOAL_MULT, g.statIds, `Quest complete: ${g.title}`, { live: false });
   g.done = true;
   g.doneDay = tx.today;
   tx.s.counters.goalsDone++;
@@ -510,12 +616,12 @@ export function collectMissed(s: GameState, from: string, to: string): ReviewIte
   const items: ReviewItem[] = [];
   for (let d = from; d < to; d = addDays(d, 1)) {
     for (const h of s.habits) {
-      if (h.polarity !== 'good' || h.paused || h.createdDay > d) continue;
+      if (h.polarity !== 'good' || h.paused || h.createdDay > d || onVacation(s, d)) continue;
       if (h.frequency === 'daily') {
         if (h.days.includes(weekday(d)) && !h.history[d]) {
           items.push({ key: `${h.id}@${d}`, habitId: h.id, day: d, title: h.title, difficulty: h.difficulty, kind: 'daily' });
         }
-      } else if (weekday(d) === 0 && h.createdDay <= weekStart(d)) {
+      } else if (weekday(d) === 0 && h.createdDay <= weekStart(d) && !weekTouchedByVacation(s, d)) {
         const missing = h.perWeek - weekCount(h, d);
         for (let n = 1; n <= missing; n++) {
           items.push({ key: `${h.id}@${d}#${n}`, habitId: h.id, day: d, title: h.title, difficulty: h.difficulty, kind: 'weekly', session: n, missing });
@@ -536,7 +642,7 @@ function creditPast(tx: Tx, h: Habit, day: string) {
   const prevStreak = h.streak;
   const prevBest = h.bestStreak;
   const mult = h.frequency === 'daily' ? streakMultiplier(h.streak) : 1;
-  const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, `${h.title} (caught up)`, regenFor(h.difficulty), day);
+  const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, `${h.title} (caught up)`, { regen: regenFor(h.difficulty), day, live: false });
   if (h.frequency === 'daily') {
     h.streak++;
     h.bestStreak = Math.max(h.bestStreak, h.streak);
@@ -554,6 +660,10 @@ function settleDays(tx: Tx, done: Set<string>) {
   for (let d = catchUpStart(s, tx.today); d < tx.today; d = addDays(d, 1)) {
     days++;
     let dmg = 0;
+    if (onVacation(s, d)) {
+      (s.vacationDays ??= {})[d] = true; // the whole day is skipped: no penalties, streaks frozen
+      continue;
+    }
     for (const h of s.habits) {
       if (h.createdDay > d || h.paused) continue;
       if (h.polarity === 'bad') {
@@ -573,8 +683,8 @@ function settleDays(tx: Tx, done: Set<string>) {
           }
         }
       } else if (weekday(d) === 0) {
-        // Sunday closes the week
-        if (h.createdDay > weekStart(d)) continue;
+        // Sunday closes the week (weeks touched by vacation aren't judged)
+        if (h.createdDay > weekStart(d) || weekTouchedByVacation(s, d)) continue;
         const missing = h.perWeek - weekCount(h, d);
         // confirmed extra sessions are credited to the latest unmarked days of that week
         let credited = 0;
@@ -603,6 +713,21 @@ function settleDays(tx: Tx, done: Set<string>) {
   }
   s.lastProcessedDay = tx.today;
   s.pendingReview = null;
+  // a vacation with an end date finishes on its own
+  const v = s.settings.vacation;
+  if (v?.until && v.until < tx.today) {
+    s.settings.vacation = null;
+    tx.log('system', 'Returned from the journey.');
+  } else if (v) (s.vacationDays ??= {})[tx.today] = true;
+  // weekly chronicle: when a new week begins, offer last week's recap
+  const thisWeek = weekStart(tx.today);
+  if (s.lastRecapWeek !== thisWeek) {
+    const prev = addDays(thisWeek, -7);
+    let had = false;
+    for (let d = prev; d < thisWeek; d = addDays(d, 1)) if (s.dayActivity[d]) had = true;
+    if (had) tx.emit({ type: 'weeklyrecap', week: prev });
+    s.lastRecapWeek = thisWeek;
+  }
   evaluateClass(tx);
   if (missed.length || totalDmg) {
     tx.emit({ type: 'dayreport', missed: [...new Set(missed)], damage: totalDmg, days });
@@ -645,6 +770,53 @@ export function resolveReview(state: GameState, done: string[], ctx: Ctx): Resul
     return tx.done();
   }
   settleDays(tx, new Set(done));
+  return tx.done();
+}
+
+/* ───────────────────────────── camp ───────────────────────────── */
+
+const campOf = (s: GameState): CampState => (s.camp ??= structuredClone(DEFAULT_CAMP));
+
+export function buyUpgrade(state: GameState, line: UpgradeLineId, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  const hero = tx.hero;
+  const camp = campOf(tx.s);
+  const cur = tierOf(camp, line);
+  const next = UPGRADE_BY_ID[line]?.tiers[cur + 1];
+  if (!next || hero.gold < next.price || hero.level < (next.minLevel ?? 1)) return tx.done();
+  hero.gold -= next.price;
+  camp.tiers[line] = cur + 1;
+  tx.s.counters.purchases++;
+  if (line === 'tent') {
+    const before = hero.maxHp;
+    hero.maxHp = maxHpFor(hero.level) + campPerks(camp).maxHp;
+    hero.hp = Math.min(hero.maxHp, hero.hp + (hero.maxHp - before));
+  }
+  tx.log('purchase', `Built ${next.name} for ${next.price} gold.`);
+  checkAchievements(tx);
+  return tx.done();
+}
+
+export function buyPet(state: GameState, pet: PetId, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  const hero = tx.hero;
+  const camp = campOf(tx.s);
+  const p = PET_BY_ID[pet];
+  if (!p || camp.pets.includes(pet) || hero.gold < p.price || hero.level < (p.minLevel ?? 1)) return tx.done();
+  hero.gold -= p.price;
+  camp.pets.push(pet);
+  camp.pet = pet;
+  tx.s.counters.purchases++;
+  tx.log('purchase', `Adopted a ${p.name} for ${p.price} gold.`);
+  checkAchievements(tx);
+  return tx.done();
+}
+
+export function customizeCamp(state: GameState, patch: Partial<Pick<CampState, 'tentColor' | 'bannerColor' | 'sigil' | 'fire' | 'pet'>>, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  const camp = campOf(tx.s);
+  if (patch.pet && !camp.pets.includes(patch.pet)) delete patch.pet;
+  Object.assign(camp, patch);
   return tx.done();
 }
 

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCheck, Flame, Plus } from 'lucide-react';
+import { CheckCheck, Flame, Palmtree, Plus } from 'lucide-react';
 import { useGame } from '../store/useGame';
 import { useActivity, useHeroClass, useHeroLook, useRegion, useToday } from '../hooks';
 import Landscape from '../components/Landscape';
-import HeroScene from '../components/HeroScene';
+import HeroScene, { type SceneActivity } from '../components/HeroScene';
+import AmbientSound from '../components/AmbientSound';
+import { parseDay } from '../game/dates';
 import { activityCaption } from '../game/activity';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
@@ -31,9 +33,14 @@ export default function Camp() {
   const goals = useGame((s) => s.goals);
   const activity = useGame((s) => s.dayActivity);
   const look = useHeroLook()!;
-  const doing = useActivity();
-  const region = useRegion();
   const today = useToday();
+  const activityNow = useActivity();
+  const vacation = useGame((s) => s.settings.vacation);
+  const endVacation = useGame((s) => s.endVacation);
+  const camp = useGame((s) => s.camp);
+  const perfect = useGame((s) => !!s.perfectDays?.[today]);
+  const doing: SceneActivity = vacation ? 'away' : activityNow;
+  const region = useRegion();
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const events = useGame((s) => s.events);
   const lastReward = [...events].reverse().find((e) => e.type === 'reward' || e.type === 'levelup');
@@ -74,15 +81,29 @@ export default function Camp() {
     .sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? '9999').localeCompare(b.due ?? '9999'))
     .slice(0, 5);
   const activeGoals = goals.filter((g) => !g.done).slice(0, 2);
-  const streak = activeStreak(activity, today);
+  const streak = activeStreak(activity, today, useGame.getState().vacationDays);
   const cls = useHeroClass();
 
   return (
     <div className="space-y-5">
       <div className="relative -mx-4 -mt-4 md:mx-0 md:mt-0">
         <Landscape region={region} className="h-[46vh] min-h-[300px] w-full md:rounded-2xl md:ring-1 md:ring-ash-600/50">
-          {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={lastReward?.id} />}
+          {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={lastReward?.id} camp={camp} perfect={perfect} />}
         </Landscape>
+        <AmbientSound activity={doing} />
+        <AnimatePresence>
+          {perfect && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 2 }}
+              className="pointer-events-none absolute inset-0 mix-blend-screen md:rounded-2xl"
+              style={{ background: 'radial-gradient(ellipse at 50% 85%, rgba(245,180,90,.28), transparent 60%), linear-gradient(to bottom, rgba(245,201,106,.10), transparent 50%)' }}
+              data-testid="perfect-glow"
+            />
+          )}
+        </AnimatePresence>
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 md:p-5">
           <div className="pr-3">
             <p className="label text-bone-dim">{region.name}</p>
@@ -90,7 +111,7 @@ export default function Camp() {
             <p className="text-xs text-ember-light/90 drop-shadow">{hero.name} {hero.title}</p>
             <AnimatePresence mode="wait">
               <motion.p key={doing} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-1 text-xs italic text-bone-dim drop-shadow" data-testid="activity-caption">
-                {activityCaption(doing, hero.name)}
+                {doing === 'away' ? `${hero.name} is away on a journey. The camp waits.` : activityCaption(doing, hero.name)}
               </motion.p>
             </AnimatePresence>
           </div>
@@ -109,10 +130,21 @@ export default function Camp() {
         </div>
       </div>
 
+      {vacation && (
+        <div className="panel flex items-center gap-3 p-3" style={{ borderColor: 'rgba(95,209,193,.45)' }} data-testid="vacation-banner">
+          <Palmtree size={22} className="shrink-0 text-spectral" />
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-semibold text-spectral">On a journey{vacation.until ? ` until ${parseDay(vacation.until).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}` : ''}</p>
+            <p className="text-xs text-bone-faint">No penalties, streaks frozen. Deeds still earn XP.</p>
+          </div>
+          <button className="btn-ghost px-3 py-2 text-xs" onClick={endVacation}>Return</button>
+        </div>
+      )}
+
       <section>
         <div className="mb-2 flex items-end justify-between">
           <div>
-            <h2 className="h-display text-lg font-bold">Today’s deeds</h2>
+            <h2 className="h-display text-lg font-bold">Today’s deeds{perfect && <span className="ml-2 align-middle text-xs font-semibold text-ember-light">✦ Perfect Day</span>}</h2>
             <p className="text-xs text-bone-faint">{goodDue ? `${doneCount} of ${goodDue} habits kept` : 'No habits due today'}</p>
           </div>
           <button className="btn-ghost px-3 py-2 text-xs" onClick={() => setEdit({ kind: 'habit' })}><Plus size={14} /> New</button>
