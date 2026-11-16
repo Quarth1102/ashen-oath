@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Dices } from 'lucide-react';
 import { useGame } from '../store/useGame';
@@ -15,6 +15,9 @@ const STEPS = ['Visage', 'Legend', 'Pillars'];
 
 export default function Onboarding() {
   const createHero = useGame((s) => s.createHero);
+  const importData = useGame((s) => s.importData);
+  const restoreRef = useRef<HTMLInputElement>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const [step, setStep] = useState(-1);
   const [dir, setDir] = useState(1);
   const [appearance, setAppearance] = useState<Appearance>(DEFAULT_LOOK);
@@ -56,6 +59,29 @@ export default function Onboarding() {
           <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.4 }} className="btn-primary mt-8 px-8 py-3 text-base" onClick={() => go(0)}>
             Forge your hero
           </motion.button>
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.8 }}
+            className="mt-4 text-sm text-bone-dim underline decoration-ash-400 underline-offset-4 hover:text-bone"
+            onClick={() => restoreRef.current?.click()}
+            data-testid="restore-start"
+          >
+            Have a backup? Restore your hero
+          </motion.button>
+          <input
+            ref={restoreRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            data-testid="restore-input"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              if (!importData(await f.text())) setRestoreError('That file is not an Ashen Oath backup.');
+            }}
+          />
+          {restoreError && <p className="mt-2 text-sm text-blood-light">{restoreError}</p>}
         </div>
       </div>
     );

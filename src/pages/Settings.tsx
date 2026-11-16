@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Download, Palmtree, Upload, Volume2 } from 'lucide-react';
+import { CloudUpload, Palmtree, Upload, Volume2 } from 'lucide-react';
+import { BACKUP_NUDGE_DAYS, daysSinceBackup, saveBackup } from '../backup';
 import { useToday } from '../hooks';
 import { parseDay } from '../game/dates';
 import { playChime } from '../audio/sound';
@@ -12,23 +13,23 @@ import type { PenaltyStrength } from '../game/types';
 export default function Settings() {
   const defs = useGame((s) => s.statDefs);
   const settings = useGame((s) => s.settings);
-  const { addStat, updateStat, removeStat, updateSettings, exportData, importData, resetAll, startVacation, endVacation } = useGame.getState();
+  const { addStat, updateStat, removeStat, updateSettings, importData, resetAll, startVacation, endVacation } = useGame.getState();
   const [until, setUntil] = useState('');
   const today = useToday();
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [resetText, setResetText] = useState('');
 
-  const doExport = () => {
-    const blob = new Blob([exportData()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ashen-oath-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMsg('Your chronicle has been exported.');
+  const doBackup = async () => {
+    const r = await saveBackup();
+    setMsg(
+      r === 'shared' ? 'Backup saved. Keep it somewhere safe, like iCloud Drive.'
+        : r === 'downloaded' ? 'Backup downloaded.'
+          : r === 'cancelled' ? null
+            : 'Could not create the backup file.',
+    );
   };
+  const since = daysSinceBackup(settings.lastBackup);
 
   const doImport = async (f: File) => {
     const ok = importData(await f.text());
@@ -151,13 +152,26 @@ export default function Settings() {
       </section>
 
       <section className="panel space-y-3 p-4">
-        <h2 className="h-display text-lg font-bold">Your data</h2>
-        <p className="text-xs text-bone-faint">Everything is stored on this device only. Export a backup now and then, or move it to another device.</p>
-        <div className="flex gap-2">
-          <button className="btn-ghost flex-1" onClick={doExport}><Download size={16} /> Export</button>
-          <button className="btn-ghost flex-1" onClick={() => fileRef.current?.click()}><Upload size={16} /> Import</button>
-          <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && doImport(e.target.files[0])} data-testid="import-input" />
+        <div className="flex items-center gap-2">
+          <CloudUpload size={18} className="text-spectral" />
+          <h2 className="h-display text-lg font-bold">Backup</h2>
         </div>
+        <p className="text-xs text-bone-faint">
+          Your hero lives only on this device. Save a backup file now and then. On iPhone, choose <b>Save to Files → iCloud Drive</b> so it’s safe even if you lose your phone. To move to another device, open the app there and restore the file.
+        </p>
+        <p className="text-xs" data-testid="last-backup">
+          {since === null ? (
+            <span className="text-blood-light">No backup yet.</span>
+          ) : (
+            <span className={since >= BACKUP_NUDGE_DAYS ? 'text-ember-light' : 'text-spectral'}>
+              Last backup: {since === 0 ? 'today' : since === 1 ? 'yesterday' : `${since} days ago`}.
+            </span>
+          )}
+        </p>
+        <button className="btn-primary w-full" onClick={doBackup} data-testid="save-backup"><CloudUpload size={16} /> Save backup to iCloud / Files</button>
+        <button className="btn-ghost w-full" onClick={() => fileRef.current?.click()}><Upload size={16} /> Restore from a backup file</button>
+        <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && doImport(e.target.files[0])} data-testid="import-input" />
+        <p className="text-[11px] text-bone-faint">Restoring replaces everything on this device with what's in the file.</p>
         {msg && <p className="text-sm text-spectral">{msg}</p>}
       </section>
 

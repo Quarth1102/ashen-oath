@@ -37,7 +37,7 @@ npm run build    # production build + PWA service worker in dist/
 - **Sound & feel:** synthesized sword chime, level-up arpeggio, perfect-day fanfare, ambient fire/water/wind/crickets that follow your hero's activity, and vibration on Android. Each can be toggled in Settings.
 - **Regions** unlock as you level: Ashen Hamlet (1), Gloomwood (5), Drowned Marsh (10), Bone Cathedral (20), Obsidian Peaks (35).
 
-All data stays on your device (IndexedDB). Use Settings → Export to make a backup.
+All data stays on your device (IndexedDB). **Back it up** with Settings → Backup → "Save backup to iCloud / Files". On iPhone, pick *Save to Files → iCloud Drive*. Today shows a reminder if your last backup is a week old. To restore, or to move your hero to another device, use "Restore from a backup file" in Settings, or "Have a backup? Restore your hero" on the title screen of a fresh install.
 
 ## Code map
 

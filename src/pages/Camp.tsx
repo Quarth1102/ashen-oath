@@ -7,6 +7,7 @@ import { useActivity, useHeroClass, useHeroLook, useRegion, useToday } from '../
 import Landscape from '../components/Landscape';
 import HeroScene, { type SceneActivity } from '../components/HeroScene';
 import AmbientSound from '../components/AmbientSound';
+import BackupNudge from '../components/BackupNudge';
 import { parseDay } from '../game/dates';
 import { activityCaption } from '../game/activity';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
@@ -129,6 +130,8 @@ export default function Camp() {
           <Hud />
         </div>
       </div>
+
+      <BackupNudge />
 
       {vacation && (
         <div className="panel flex items-center gap-3 p-3" style={{ borderColor: 'rgba(95,209,193,.45)' }} data-testid="vacation-banner">

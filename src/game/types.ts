@@ -165,6 +165,10 @@ export interface Settings {
   penalty: PenaltyStrength;
   /** ask "did you do these?" before applying penalties for unmarked habits (default on) */
   reviewMissed?: boolean;
+  /** when the chronicle was last saved to a backup file (ISO time) */
+  lastBackup?: string;
+  /** don't nudge about backups until this day */
+  backupSnoozeUntil?: string;
   /** ids of collapsed list sections, e.g. "quests:habit:strength" */
   collapsed?: string[];
   /** vacation mode: no penalties, reviews or streak changes from `since` (to `until`, if set) */
