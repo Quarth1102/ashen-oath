@@ -6,7 +6,7 @@ import { useGame } from '../store/useGame';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty, PageHeader } from '../components/ui';
-import { GroupSection, StatGroups } from '../components/GroupSection';
+import { GroupSection, HabitTiers, StatGroups } from '../components/GroupSection';
 
 type Tab = 'habit' | 'todo' | 'goal';
 const ADD_LABEL: Record<Tab, string> = { habit: 'Add Habit', todo: 'Add To-do', goal: 'Add Goal' };
@@ -72,7 +72,7 @@ export default function Quests() {
           {tab === 'habit' && (
             <>
               {habits.length === 0 && <Empty icon="flame" title="No habits inscribed">Build virtues to grow stronger. Name your vices to resist them.</Empty>}
-              <StatGroups scope="quests:habit" items={activeHabits} defs={defs} render={(h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />} />
+              <HabitTiers scope="quests:habit" habits={activeHabits} defs={defs} render={(h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />} />
               {pausedHabits.length > 0 && (
                 <GroupSection id="quests:habit:paused" title="Paused" icon="moon" count={pausedHabits.length} muted>
                   <AnimatePresence initial={false}>{pausedHabits.map((h) => <HabitCard key={h.id} habit={h} onEdit={() => setEdit({ kind: 'habit', item: h })} />)}</AnimatePresence>

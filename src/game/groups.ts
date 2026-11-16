@@ -21,3 +21,19 @@ export function groupByStat<T extends { statIds: string[] }>(items: T[], defs: S
   }
   return groups.filter((g) => g.items.length > 0);
 }
+
+/** How a habit is scheduled: drives the top-level sections of habit lists. */
+export type HabitTier = 'daily' | 'weekly' | 'anytime' | 'vice';
+
+export const HABIT_TIERS: { id: HabitTier; title: string; subtitle: string; icon: string; color: string }[] = [
+  { id: 'daily', title: 'Daily', subtitle: 'Due on set days. Miss one and it costs HP.', icon: 'sun', color: '#e0a33a' },
+  { id: 'weekly', title: 'Weekly', subtitle: 'A target number of times each week.', icon: 'flag', color: '#5a8fd1' },
+  { id: 'anytime', title: 'Anytime', subtitle: 'No penalty. Do them whenever you like.', icon: 'feather', color: '#5fd1c1' },
+  { id: 'vice', title: 'Vices', subtitle: 'Resist these. Giving in costs HP.', icon: 'skull', color: '#d13a48' },
+];
+
+export function habitTier(h: { polarity: 'good' | 'bad'; frequency: 'daily' | 'weekly'; days: number[] }): HabitTier {
+  if (h.polarity === 'bad') return 'vice';
+  if (h.frequency === 'weekly') return 'weekly';
+  return h.days.length ? 'daily' : 'anytime';
+}

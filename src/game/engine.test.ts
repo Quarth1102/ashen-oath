@@ -716,3 +716,13 @@ describe('rank wardrobes', () => {
     expect(r.state.hero!.gold).toBeGreaterThan(s.hero!.gold);
   });
 });
+
+describe('habit tiers', () => {
+  it('sorts habits into daily, weekly, anytime and vices', async () => {
+    const { habitTier } = await import('./groups');
+    expect(habitTier({ polarity: 'good', frequency: 'daily', days: [1, 3] })).toBe('daily');
+    expect(habitTier({ polarity: 'good', frequency: 'daily', days: [] })).toBe('anytime');
+    expect(habitTier({ polarity: 'good', frequency: 'weekly', days: [] })).toBe('weekly');
+    expect(habitTier({ polarity: 'bad', frequency: 'daily', days: [0, 1, 2, 3, 4, 5, 6] })).toBe('vice');
+  });
+});

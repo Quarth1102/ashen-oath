@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { groupByStat } from '../game/groups';
+import { HABIT_TIERS, groupByStat, habitTier } from '../game/groups';
+import type { Habit } from '../game/types';
 import type { StatDef } from '../game/types';
 import { Icon } from './Icon';
 import { rgba } from '../art/color';
@@ -61,5 +62,56 @@ export function StatGroups<T extends { id: string; statIds: string[] }>({
         </GroupSection>
       ))}
     </div>
+  );
+}
+
+/** Habits split into Daily / Weekly / Anytime / Vices, each grouped by stat inside. */
+export function HabitTiers({ scope, habits, defs, render }: { scope: string; habits: Habit[]; defs: StatDef[]; render: (h: Habit) => ReactNode }) {
+  return (
+    <div className="space-y-5">
+      {HABIT_TIERS.map((t) => {
+        const items = habits.filter((h) => habitTier(h) === t.id);
+        if (!items.length) return null;
+        return (
+          <TierSection key={t.id} id={`${scope}:tier:${t.id}`} title={t.title} subtitle={t.subtitle} icon={t.icon} color={t.color} count={items.length}>
+            <StatGroups scope={`${scope}:${t.id}`} items={items} defs={defs} render={render} />
+          </TierSection>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A top-level, collapsible section with a heading and a short explanation. */
+export function TierSection({
+  id, title, subtitle, icon, color, count, children,
+}: { id: string; title: string; subtitle: string; icon: string; color: string; count: number; children: ReactNode }) {
+  const collapsed = useGame((s) => (s.settings.collapsed ?? []).includes(id));
+  const toggle = useGame((s) => s.toggleCollapsed);
+  return (
+    <motion.section layout="position" className="rounded-2xl border p-3" style={{ borderColor: rgba(color, 0.3), background: rgba(color, 0.04) }} data-testid={`tier-${id}`}>
+      <button type="button" onClick={() => toggle(id)} aria-expanded={!collapsed} className="flex w-full items-center gap-3 text-left">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: rgba(color, 0.16), color }}>
+          <Icon name={icon} size={18} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline gap-2">
+            <span className="h-display text-lg font-bold" style={{ color }}>{title}</span>
+            <span className="font-pixel text-sm text-bone-faint">{count}</span>
+          </span>
+          <span className="block text-[11px] text-bone-faint">{subtitle}</span>
+        </span>
+        <motion.span animate={{ rotate: collapsed ? -90 : 0 }} className="text-bone-faint">
+          <ChevronDown size={18} />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+            <div className="pt-3">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
   );
 }
