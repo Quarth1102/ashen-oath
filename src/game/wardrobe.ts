@@ -3,7 +3,7 @@ import type { Hero, Slot, StatDef } from './types';
 import { GEAR, GEAR_BY_ID, SLOTS, type GearItem, type GearPath } from '../data/gear';
 import { normalizeClassId, resolveClass } from './classes';
 
-const RANK_PATHS: GearPath[] = ['strength', 'vitality', 'intellect', 'wisdom', 'discipline', 'charisma'];
+const RANK_PATHS: GearPath[] = ['body', 'mind', 'spirit', 'discipline'];
 
 /** Wardrobe paths open to a class: its stat(s); a Paragon may wear every rank's gear. */
 export function pathsFor(classId: string, defs: StatDef[]): GearPath[] {

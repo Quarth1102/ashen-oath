@@ -165,6 +165,8 @@ export interface Settings {
   penalty: PenaltyStrength;
   /** ask "did you do these?" before applying penalties for unmarked habits (default on) */
   reviewMissed?: boolean;
+  /** show the one-time 'stats reforged into pillars' notice */
+  pillarsNotice?: boolean;
   /** when the chronicle was last saved to a backup file (ISO time) */
   lastBackup?: string;
   /** don't nudge about backups until this day */

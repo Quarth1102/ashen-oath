@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import type { StatDef } from '../game/types';
 import { rgba } from '../art/color';
+import { PILLAR_BLURB } from '../data/stats';
 
 export function Bar({
   value, max, color, className = '', height = 8, glow = false,
@@ -138,25 +139,30 @@ export function StatBadge({ def, size = 'sm' }: { def: StatDef; size?: 'sm' | 'x
   );
 }
 
-export function StatPicker({ defs, value, onChange }: { defs: StatDef[]; value: string[]; onChange: (v: string[]) => void }) {
+/** Pick exactly one pillar: four large buttons with what each covers. */
+export function PillarPicker({ defs, value, onChange }: { defs: StatDef[]; value?: string; onChange: (id: string) => void }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Pillar">
       {defs.map((d) => {
-        const on = value.includes(d.id);
+        const on = value === d.id;
         return (
           <button
             type="button"
             key={d.id}
-            onClick={() => onChange(on ? value.filter((x) => x !== d.id) : [...value, d.id])}
-            className="chip"
-            style={{
-              color: on ? '#0d0b10' : d.color,
-              background: on ? d.color : rgba(d.color, 0.06),
-              borderColor: rgba(d.color, on ? 0.9 : 0.35),
-            }}
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(d.id)}
+            className="flex items-center gap-2.5 rounded-xl border-2 p-2.5 text-left transition"
+            style={{ borderColor: on ? d.color : rgba(d.color, 0.25), background: on ? rgba(d.color, 0.18) : rgba(d.color, 0.04) }}
+            data-testid={`pillar-${d.id}`}
           >
-            <Icon name={d.icon} size={13} />
-            {d.name}
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: rgba(d.color, on ? 0.3 : 0.12), color: d.color }}>
+              <Icon name={d.icon} size={18} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold" style={{ color: on ? d.color : undefined }}>{d.name}</span>
+              <span className="block text-[10px] leading-tight text-bone-faint">{PILLAR_BLURB[d.id] ?? ''}</span>
+            </span>
           </button>
         );
       })}

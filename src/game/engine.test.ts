@@ -7,6 +7,7 @@ import { rollRarity } from './economy';
 import type { Ctx, GameState } from './types';
 import { DEFAULT_STATS } from '../data/stats';
 import { DEFAULT_LOOK } from '../data/classes';
+import { GEAR_BY_ID } from '../data/gear';
 import { determineClassId, resolveClass, totalStatXp, CLASS_UNLOCK_LEVEL } from './classes';
 import type { Progress } from './types';
 
@@ -75,7 +76,7 @@ describe('hero creation', () => {
   it('starts as an unclassed Wanderer', () => {
     const s = withHero();
     expect(s.hero!.classId).toBe('wanderer');
-    expect(s.hero!.stats.strength.level).toBe(1);
+    expect(s.hero!.stats.body.level).toBe(1);
     expect(s.hero!.inventory).toEqual([]);
     expect(s.lastProcessedDay).toBe(E.today(s, NOON));
   });
@@ -88,27 +89,27 @@ describe('earned classes', () => {
     Object.fromEntries(defs.map((d) => [d.id, { level: 1, xp: xp[d.id] ?? 0 }]));
 
   it('stays Wanderer below the unlock level', () => {
-    expect(determineClassId(defs, st({ strength: 500 }), CLASS_UNLOCK_LEVEL - 1)).toBe('wanderer');
+    expect(determineClassId(defs, st({ body: 500 }), CLASS_UNLOCK_LEVEL - 1)).toBe('wanderer');
   });
   it('gives a pure class when one stat dominates', () => {
-    expect(determineClassId(defs, st({ strength: 100, discipline: 40, wisdom: 10 }), 3)).toBe('pure:strength');
-    expect(resolveClass('pure:strength', defs).name).toBe('Knight');
+    expect(determineClassId(defs, st({ body: 100, discipline: 40, spirit: 10 }), 3)).toBe('pure:body');
+    expect(resolveClass('pure:body', defs).name).toBe('Knight');
   });
   it('gives a hybrid when the top two are close', () => {
-    const id = determineClassId(defs, st({ strength: 100, discipline: 80, wisdom: 10 }), 3);
-    expect(id).toBe('hybrid:discipline+strength');
+    const id = determineClassId(defs, st({ body: 100, discipline: 80, spirit: 10 }), 3);
+    expect(id).toBe('hybrid:body+discipline');
     expect(resolveClass(id, defs).name).toBe('Templar');
     // hybrid gear mixes both parents: Knight plate + sword, Rogue cloak
     expect(resolveClass(id, defs).kit.sort()).toEqual(['st-knight-armor', 'st-knight-sword', 'st-rogue-cloak'].sort());
   });
   it('needs the runner-up to hold a real share for a hybrid', () => {
     // runner-up is close to the leader, but both are tiny next to a spread of others → paragon-ish, not hybrid
-    expect(determineClassId(defs, st({ strength: 30, vitality: 28, intellect: 27, wisdom: 26, discipline: 25, charisma: 24 }), 3)).toBe('paragon');
+    expect(determineClassId(defs, st({ body: 30, mind: 28, spirit: 27, discipline: 26 }), 3)).toBe('paragon');
   });
   it('names classes built from custom stats', () => {
     const custom = [...defs, { id: 'faith', name: 'Faith', icon: 'moon', color: '#ffffff' }];
     expect(resolveClass('pure:faith', custom).name).toBe('Faith-Sworn');
-    expect(resolveClass('hybrid:faith+strength', custom).name).toBe('Faith-Strength Adept');
+    expect(resolveClass('hybrid:body+faith', custom).name).toBe('Body-Faith Adept');
   });
   it('maps old picked-class ids', () => {
     expect(resolveClass('knight', defs).name).toBe('Knight');
@@ -121,30 +122,31 @@ describe('earned classes', () => {
     let s = withHero();
     s.hero!.level = 2;
     s.hero!.xp = 140; // one hard deed away from level 3 (needs 141)
-    const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['strength'] });
+    const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['body'] });
     blockPerfect(s);
     const r = E.completeHabit(s, id, ctx());
     s = r.state;
     expect(s.hero!.level).toBe(3);
-    expect(s.hero!.classId).toBe('pure:strength');
+    expect(s.hero!.classId).toBe('pure:body');
     expect(s.hero!.title).toBe('the Unbroken');
     const ev = r.events.find((e) => e.type === 'classchange');
-    expect(ev && ev.type === 'classchange' && ev.kit.sort()).toEqual(['st-knight-armor', 'st-knight-sword']);
+    // Body's wardrobe: Knight and Warden pieces unlocked at level 3
+    expect(ev && ev.type === 'classchange' && ev.kit.sort()).toEqual(['st-knight-armor', 'st-knight-sword', 'st-warden-axe', 'st-warden-chain', 'st-warden-cloak']);
     // next strength deed gets +10%
-    const before = totalStatXp(s.hero!.stats.strength);
+    const before = totalStatXp(s.hero!.stats.body);
     s = E.completeHabit(s, id, ctx(at(NOON, 1))).state;
-    expect(totalStatXp(s.hero!.stats.strength) - before).toBe(Math.round(Math.round(40 * 1.02) * 1.1));
+    expect(totalStatXp(s.hero!.stats.body) - before).toBe(Math.round(Math.round(40 * 1.02) * 1.1));
   });
 
   it('re-evaluates at the new day and switches to a hybrid', () => {
     let s = withHero();
     s.hero!.level = 3;
-    s.hero!.classId = 'pure:strength';
-    s.hero!.classesAttained = ['pure:strength'];
-    s.hero!.stats.strength = { level: 1, xp: 100 };
+    s.hero!.classId = 'pure:body';
+    s.hero!.classesAttained = ['pure:body'];
+    s.hero!.stats.body = { level: 1, xp: 100 };
     s.hero!.stats.discipline = { level: 1, xp: 90 };
     const r = E.processDay(s, ctx(at(NOON, 1)));
-    expect(r.state.hero!.classId).toBe('hybrid:discipline+strength');
+    expect(r.state.hero!.classId).toBe('hybrid:body+discipline');
     expect(r.events.some((e) => e.type === 'classchange')).toBe(true);
   });
 });
@@ -152,14 +154,14 @@ describe('earned classes', () => {
 describe('completing habits', () => {
   it('grants xp split across stats, gold, and can be undone exactly', () => {
     let s = withHero();
-    const id = addHabit(s, { title: 'Run', difficulty: 'medium', statIds: ['strength', 'vitality'] });
+    const id = addHabit(s, { title: 'Run', difficulty: 'medium', statIds: ['body', 'mind'] });
     blockPerfect(s);
     const r = E.completeHabit(s, id, ctx());
     s = r.state;
     expect(s.hero!.xp).toBe(20);
     expect(s.hero!.gold).toBe(10 + 10); // 10 from deed + 10 from First Blood achievement
-    expect(s.hero!.stats.strength.xp).toBe(10);
-    expect(s.hero!.stats.vitality.xp).toBe(10);
+    expect(s.hero!.stats.body.xp).toBe(10);
+    expect(s.hero!.stats.mind.xp).toBe(10);
     expect(s.habits[0].streak).toBe(1);
     expect(r.events.some((e) => e.type === 'achievement')).toBe(true);
 
@@ -168,7 +170,7 @@ describe('completing habits', () => {
 
     s = E.uncompleteHabit(s, id, ctx()).state;
     expect(s.hero!.xp).toBe(0);
-    expect(s.hero!.stats.strength.xp).toBe(0);
+    expect(s.hero!.stats.body.xp).toBe(0);
     expect(s.habits[0].streak).toBe(0);
     expect(s.hero!.gold).toBe(10); // achievement gold kept
   });
@@ -187,13 +189,13 @@ describe('completing habits', () => {
 
   it('gear is cosmetic: no XP bonus', () => {
     let s = withHero();
-    s.hero!.classId = 'pure:wisdom'; // a Witch: no class bonus to strength
+    s.hero!.classId = 'pure:spirit'; // a Witch: no class bonus to strength
     s.hero!.level = 25;
     s.hero!.equipped = { weapon: 'wi-moonstaff', armor: 'wi-robe' };
-    const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['strength'] });
+    const id = addHabit(s, { title: 'Lift', difficulty: 'hard', statIds: ['body'] });
     blockPerfect(s);
     s = E.completeHabit(s, id, ctx()).state;
-    expect(totalStatXp(s.hero!.stats.strength)).toBe(40);
+    expect(totalStatXp(s.hero!.stats.body)).toBe(40);
   });
 
   it('drops a chest when the loot roll succeeds', () => {
@@ -321,10 +323,10 @@ describe('stats', () => {
     let s = withHero();
     s = E.addStat(s, { name: 'Faith', icon: 'moon', color: '#fff' }, ctx()).state;
     expect(s.hero!.stats.faith).toEqual({ level: 1, xp: 0 });
-    addHabit(s, { title: 'Pray', statIds: ['faith', 'wisdom'] });
+    addHabit(s, { title: 'Pray', statIds: ['faith', 'spirit'] });
     s = E.removeStat(s, 'faith', ctx()).state;
     expect(s.statDefs.find((d) => d.id === 'faith')).toBeUndefined();
-    expect(s.habits[0].statIds).toEqual(['wisdom']);
+    expect(s.habits[0].statIds).toEqual(['spirit']);
   });
 
   it('rolls rarities by weight', () => {
@@ -353,7 +355,7 @@ describe('catch-up review', () => {
 
   it('credits ticked habits and penalises only the rest', () => {
     let s = withHero();
-    const run = addHabit(s, { title: 'Run', difficulty: 'medium', statIds: ['strength'] });
+    const run = addHabit(s, { title: 'Run', difficulty: 'medium', statIds: ['body'] });
     addHabit(s, { title: 'Read', difficulty: 'easy' });
     s = E.processDay(s, ctx(at(NOON, 1))).state;
     const r = E.resolveReview(s, [`${run}@${YESTERDAY}`], ctx(at(NOON, 1)));
@@ -362,7 +364,7 @@ describe('catch-up review', () => {
     expect(runH.history[YESTERDAY]).toBeTruthy();
     expect(runH.streak).toBe(1);
     expect(s.hero!.xp).toBeGreaterThan(0);
-    expect(totalStatXp(s.hero!.stats.strength)).toBe(20);
+    expect(totalStatXp(s.hero!.stats.body)).toBe(20);
     expect(s.dayActivity[YESTERDAY]).toBe(1);
     // only Read (easy = 4) hurt; Run's regen was capped at full HP before the damage
     expect(s.hero!.hp).toBe(s.hero!.maxHp - 4);
@@ -519,15 +521,15 @@ describe('paused habits & grouping', () => {
   it('groups by first tagged stat in stat order, untagged last', async () => {
     const { groupByStat } = await import('./groups');
     const items = [
-      { id: 'a', statIds: ['wisdom', 'strength'] },
+      { id: 'a', statIds: ['spirit', 'body'] },
       { id: 'b', statIds: [] },
-      { id: 'c', statIds: ['strength'] },
-      { id: 'd', statIds: ['gone', 'wisdom'] },
+      { id: 'c', statIds: ['body'] },
+      { id: 'd', statIds: ['gone', 'spirit'] },
     ];
     const g = groupByStat(items, DEFAULT_STATS);
     expect(g.map((x) => [x.key, x.items.map((i) => i.id)])).toEqual([
-      ['strength', ['c']],
-      ['wisdom', ['a', 'd']],
+      ['body', ['c']],
+      ['spirit', ['a', 'd']],
       ['untagged', ['b']],
     ]);
   });
@@ -557,8 +559,8 @@ describe('combos', () => {
 describe('perfect day', () => {
   it('grants 50 XP spread over every stat once all due habits are done, and revokes on undo', () => {
     let s = withHero();
-    const a = addHabit(s, { title: 'A', statIds: ['strength'] });
-    const b = addHabit(s, { title: 'B', statIds: ['wisdom'] });
+    const a = addHabit(s, { title: 'A', statIds: ['body'] });
+    const b = addHabit(s, { title: 'B', statIds: ['spirit'] });
     addHabit(s, { title: 'Optional', days: [] }); // no-penalty habits don't count
     s = E.completeHabit(s, a, ctx()).state;
     expect(s.perfectDays?.['2026-11-11']).toBeUndefined();
@@ -567,13 +569,13 @@ describe('perfect day', () => {
     const pd = s.perfectDays!['2026-11-11'];
     expect(pd).toBeTruthy();
     expect(Object.keys(pd.stats).sort()).toEqual(DEFAULT_STATS.map((d) => d.id).sort());
-    expect(Object.values(pd.stats).reduce((x, y) => x + y, 0)).toBe(50);
+    expect(Object.values(pd.stats).reduce((x, y) => x + y, 0)).toBe(50 + E.DISCIPLINE_PERFECT_DAY);
     expect(r.events.some((e) => e.type === 'perfectday')).toBe(true);
     expect(s.counters.completions).toBe(2); // the bonus isn't a deed
     const xp = s.hero!.totalXp;
     s = E.uncompleteHabit(s, b, ctx(at(NOON, 0, 1))).state;
     expect(s.perfectDays!['2026-11-11']).toBeUndefined();
-    expect(s.hero!.totalXp).toBe(xp - 50 - 10);
+    expect(s.hero!.totalXp).toBe(xp - 50 - E.DISCIPLINE_PERFECT_DAY - 10);
   });
 });
 
@@ -637,7 +639,7 @@ describe('weekly recap', () => {
     const { weekRecap } = await import('./recap');
     let s = withHero(); // created Wed 11 Nov
     s.settings.reviewMissed = false;
-    const id = addHabit(s, { title: 'Read', statIds: ['intellect'] });
+    const id = addHabit(s, { title: 'Read', statIds: ['mind'] });
     s = E.completeHabit(s, id, ctx()).state;
     s = E.processDay(s, ctx(at(NOON, 1))).state;
     s = E.completeHabit(s, id, ctx(at(NOON, 1))).state;
@@ -647,7 +649,7 @@ describe('weekly recap', () => {
     const rec = weekRecap(r.state, '2026-11-09');
     expect(rec.deeds).toBe(2);
     expect(rec.perfectDays).toEqual(['2026-11-11', '2026-11-12']);
-    expect(rec.stats[0].id).toBe('intellect');
+    expect(rec.stats[0].id).toBe('mind');
     expect(rec.habits[0]).toMatchObject({ title: 'Read', done: 2, due: 5 }); // Wed–Sun
   });
 });
@@ -662,18 +664,18 @@ describe('rank wardrobes', () => {
 
   it('only allows the current rank, unlocked by level', () => {
     let s = withHero();
-    s.hero!.classId = 'pure:strength';
+    s.hero!.classId = 'pure:body';
     s.hero!.level = 3;
     s = E.equip(s, 'st-knight-sword', ctx()).state;
     expect(s.hero!.equipped.weapon).toBe('st-knight-sword');
-    expect(E.equip(s, 'st-warden-axe', ctx()).state.hero!.equipped.weapon).toBe('st-knight-sword'); // a Warden's
+    expect(E.equip(s, 'st-necro-tome', ctx()).state.hero!.equipped.weapon).toBe('st-knight-sword'); // a Mage's
     expect(E.equip(s, 'helm-iron', ctx()).state.hero!.equipped.helm).toBeUndefined(); // level 8 piece
   });
 
   it('hybrids wear both parents, paragons wear everything', () => {
     let s = withHero();
     s.hero!.level = 8;
-    s.hero!.classId = 'hybrid:discipline+strength';
+    s.hero!.classId = 'hybrid:body+discipline';
     s = E.equip(s, 'helm-iron', ctx()).state;
     s = E.equip(s, 'ro-fang', ctx()).state;
     expect(s.hero!.equipped).toMatchObject({ helm: 'helm-iron', weapon: 'ro-fang' });
@@ -685,28 +687,28 @@ describe('rank wardrobes', () => {
     let s = withHero();
     s.settings.reviewMissed = false;
     s.hero!.level = 8;
-    s.hero!.classId = 'pure:strength';
-    s.hero!.classesAttained = ['pure:strength'];
+    s.hero!.classId = 'pure:body';
+    s.hero!.classesAttained = ['pure:body'];
     s = E.equipRankSet(s, ctx()).state;
-    expect(s.hero!.equipped).toMatchObject({ armor: 'st-knight-armor', helm: 'helm-iron', weapon: 'sword-long', cloak: 'cloak-crimson' });
-    s.hero!.stats.vitality = { level: 1, xp: 200 };
+    expect(Object.values(s.hero!.equipped).every((id) => id && ['body'].includes(GEAR_BY_ID[id].path) && GEAR_BY_ID[id].unlock === 8)).toBe(true);
+    s.hero!.stats.mind = { level: 1, xp: 200 };
     const r = E.processDay(s, ctx(at(NOON, 1)));
-    expect(r.state.hero!.classId).toBe('pure:vitality');
-    expect(Object.values(r.state.hero!.equipped).filter((id) => id?.startsWith('st-knight') || id === 'helm-iron')).toEqual([]);
+    expect(r.state.hero!.classId).toBe('pure:mind');
+    expect(Object.values(r.state.hero!.equipped).filter((id) => id && GEAR_BY_ID[id].path === 'body')).toEqual([]);
     const ev = r.events.find((e) => e.type === 'classchange');
-    expect(ev && ev.type === 'classchange' && ev.kit).toContain('wa-antlers');
+    expect(ev && ev.type === 'classchange' && ev.kit).toContain('robe-scholar');
   });
 
   it('announces new pieces at level milestones', () => {
     let s = withHero();
-    s.hero!.classId = 'pure:strength';
+    s.hero!.classId = 'pure:body';
     s.hero!.level = 7;
     s.hero!.xp = heroXpToNext(7) - 1;
     blockPerfect(s);
     const id = addHabit(s, { title: 'x', difficulty: 'easy' });
     const r = E.completeHabit(s, id, ctx());
     const ev = r.events.find((e) => e.type === 'wardrobe');
-    expect(ev && ev.type === 'wardrobe' && ev.items.sort()).toEqual(['cloak-crimson', 'helm-iron', 'sword-long']);
+    expect(ev && ev.type === 'wardrobe' && ev.items.sort()).toEqual(['armor-padded', 'cloak-crimson', 'cloak-wool', 'helm-iron', 'sword-long', 'wa-antlers']);
   });
 
   it('chests hold gold', () => {
@@ -724,5 +726,45 @@ describe('habit tiers', () => {
     expect(habitTier({ polarity: 'good', frequency: 'daily', days: [] })).toBe('anytime');
     expect(habitTier({ polarity: 'good', frequency: 'weekly', days: [] })).toBe('weekly');
     expect(habitTier({ polarity: 'bad', frequency: 'daily', days: [0, 1, 2, 3, 4, 5, 6] })).toBe('vice');
+  });
+});
+
+describe('four pillars', () => {
+  it('migrates an old six-stat save without losing progress', async () => {
+    const { migrateToPillars, needsPillarMigration } = await import('./migrate');
+    const old = withHero();
+    old.statDefs = ['strength', 'vitality', 'intellect', 'wisdom', 'discipline', 'charisma'].map((id) => ({ id, name: id, icon: 'star', color: '#fff' }));
+    old.hero!.stats = {
+      strength: { level: 2, xp: 5 }, vitality: { level: 1, xp: 10 }, intellect: { level: 1, xp: 7 },
+      wisdom: { level: 1, xp: 3 }, discipline: { level: 1, xp: 4 }, charisma: { level: 1, xp: 6 },
+    };
+    old.hero!.classId = 'hybrid:charisma+wisdom'; // both now Spirit
+    old.habits.push(E.makeHabit({ title: 'Run', statIds: ['vitality', 'strength'], history: { '2026-11-11': { xp: 10, gold: 5, hp: 0, stats: { vitality: 5, strength: 5 }, day: '2026-11-11', prevStreak: 0, prevBest: 0 } } }, '2026-11-11'));
+    expect(needsPillarMigration(old)).toBe(true);
+    const s = migrateToPillars(old);
+    expect(s.statDefs.map((d) => d.id)).toEqual(['body', 'mind', 'spirit', 'discipline']);
+    expect(totalStatXp(s.hero!.stats.body)).toBe(20 + 5 + 10);
+    expect(totalStatXp(s.hero!.stats.spirit)).toBe(9);
+    expect(s.hero!.classId).toBe('pure:spirit');
+    expect(s.habits[0].statIds).toEqual(['body']);
+    expect(s.habits[0].history['2026-11-11'].stats).toEqual({ body: 10 });
+    expect(needsPillarMigration(s)).toBe(false);
+    expect(migrateToPillars(s)).toBe(s); // idempotent
+  });
+
+  it('names the new ranks', () => {
+    const d = DEFAULT_STATS;
+    expect(['body', 'mind', 'spirit', 'discipline'].map((p) => resolveClass(`pure:${p}`, d).name)).toEqual(['Knight', 'Mage', 'Mystic', 'Sentinel']);
+    expect(resolveClass('hybrid:body+mind', d).name).toBe('Spellblade');
+    expect(resolveClass('hybrid:discipline+mind', d).name).toBe('Runekeeper');
+    expect(resolveClass('paragon', d).name).toBe('The Chosen One');
+  });
+
+  it('grows Discipline from consistency', () => {
+    let s = withHero();
+    s.settings.reviewMissed = false;
+    addHabit(s, { title: 'Doomscroll', polarity: 'bad', statIds: ['discipline'], streak: 6 });
+    s = E.processDay(s, ctx(at(NOON, 1))).state; // one clean day → streak 7 milestone
+    expect(totalStatXp(s.hero!.stats.discipline)).toBe(E.DISCIPLINE_CLEAN_DAY + E.DISCIPLINE_STREAK);
   });
 });

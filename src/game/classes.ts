@@ -4,6 +4,7 @@ import { statXpToNext } from './xp';
 import { mix } from '../art/color';
 import { GEAR_BY_ID } from '../data/gear';
 import { HYBRID, LEGACY_CLASS_IDS, PARAGON, PURE, WANDERER, pairKey, type ClassInfo } from '../data/classes';
+import { STAT_MIGRATION } from '../data/stats';
 
 /** Hero level at which a class first awakens (before that you are a Wanderer). */
 export const CLASS_UNLOCK_LEVEL = 3;
@@ -52,8 +53,16 @@ export function determineClassId(defs: StatDef[], stats: Record<string, Progress
   return `pure:${first.id}`;
 }
 
-export function normalizeClassId(id: string): string {
-  return LEGACY_CLASS_IDS[id] ?? id;
+/** Maps picked-class ids and ranks from the old six stats onto the four pillars. */
+export function normalizeClassId(raw: string): string {
+  const id = LEGACY_CLASS_IDS[raw] ?? raw;
+  const m = (sid: string) => STAT_MIGRATION[sid] ?? sid;
+  if (id.startsWith('pure:')) return `pure:${m(id.slice(5))}`;
+  if (id.startsWith('hybrid:')) {
+    const [a, b] = id.slice(7).split('+').map(m);
+    return a === b ? `pure:${a}` : `hybrid:${pairKey(a, b)}`;
+  }
+  return id;
 }
 
 /** Gear for a class: each slot taken from the first parent class that has it (body stats first). */

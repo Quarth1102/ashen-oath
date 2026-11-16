@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { del, get, set } from 'idb-keyval';
 import * as E from '../game/engine';
+import { migrateToPillars, needsPillarMigration } from '../game/migrate';
+
+/** IndexedDB key holding the save as it was before the pillars upgrade (for safety). */
+export const PRE_PILLARS_KEY = 'ashen-oath-pre-pillars';
 import type { CampState, PetId, UpgradeLineId } from '../data/camp';
 import type { Ctx, GameEvent, GameState, Goal, Habit, Settings, Slot, StatDef, Todo, Hero } from '../game/types';
 
@@ -139,7 +143,7 @@ export const useGame = create<Store>()(
         try {
           const data = JSON.parse(json);
           if (!E.validateImport(data)) return false;
-          setState({ ...E.initialState(), ...data, events: [] });
+          setState({ ...E.initialState(), ...migrateToPillars(data), events: [] });
           return true;
         } catch {
           return false;
@@ -153,6 +157,14 @@ export const useGame = create<Store>()(
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => pickState(s),
       onRehydrateStorage: () => () => {
+        // one-time upgrade from the old six stats to the four pillars
+        const st = useGame.getState();
+        const current = pickState(st);
+        if (needsPillarMigration(current)) {
+          if (current.hero) set(PRE_PILLARS_KEY, JSON.stringify(current, null, 2)).catch(() => {});
+          const next = migrateToPillars(current);
+          useGame.setState({ ...next, settings: { ...next.settings, pillarsNotice: !!current.hero } });
+        }
         useGame.setState({ hydrated: true });
       },
     },

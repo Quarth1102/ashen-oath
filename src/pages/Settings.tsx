@@ -5,15 +5,13 @@ import { useToday } from '../hooks';
 import { parseDay } from '../game/dates';
 import { playChime } from '../audio/sound';
 import { useGame } from '../store/useGame';
-import StatsEditor from '../components/StatsEditor';
 import { PageHeader, Segmented } from '../components/ui';
 import { PENALTY_LABEL } from '../game/penalty';
 import type { PenaltyStrength } from '../game/types';
 
 export default function Settings() {
-  const defs = useGame((s) => s.statDefs);
   const settings = useGame((s) => s.settings);
-  const { addStat, updateStat, removeStat, updateSettings, importData, resetAll, startVacation, endVacation } = useGame.getState();
+  const { updateSettings, importData, resetAll, startVacation, endVacation } = useGame.getState();
   const [until, setUntil] = useState('');
   const today = useToday();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -39,14 +37,6 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" />
-
-      <section className="panel space-y-3 p-4">
-        <div>
-          <h2 className="h-display text-lg font-bold">Stats</h2>
-          <p className="text-xs text-bone-faint">The pillars your deeds train. Removing a stat erases its progress and untags it from your quests.</p>
-        </div>
-        <StatsEditor defs={defs} onAdd={addStat} onUpdate={updateStat} onRemove={removeStat} />
-      </section>
 
       <section className="panel space-y-4 p-4">
         <h2 className="h-display text-lg font-bold">The rules of the oath</h2>

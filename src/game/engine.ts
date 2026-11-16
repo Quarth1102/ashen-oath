@@ -159,12 +159,14 @@ interface GrantOpts {
   day?: string;
   /** a live completion: builds the combo */
   live?: boolean;
+  /** no 'reward' event (no chime / floating text), e.g. background Discipline bonuses */
+  quiet?: boolean;
   /** counts as a deed (activity, completions, loot). False for bonuses. */
   deed?: boolean;
 }
 
 function grantReward(tx: Tx, base: number, statIds: string[], source: string, opts: GrantOpts = {}): Reward {
-  const { regen = 0, day = tx.today, live = true, deed = true } = opts;
+  const { regen = 0, day = tx.today, live = true, deed = true, quiet = false } = opts;
   const hero = tx.hero;
   const perks = campPerks(tx.s.camp);
   let mult = 1 + perks.xp;
@@ -223,7 +225,7 @@ function grantReward(tx: Tx, base: number, statIds: string[], source: string, op
       tx.emit({ type: 'chest' });
     }
   }
-  tx.emit({ type: 'reward', xp: total, gold, hp, source });
+  if (!quiet) tx.emit({ type: 'reward', xp: total, gold, hp, source });
   tx.log('complete', `${source} (+${total} XP, +${gold} gold)`);
   return { xp: total, gold, hp, stats, day };
 }
@@ -265,14 +267,42 @@ export function isPerfectDay(s: GameState, day: string): boolean {
   return due.length > 0 && due.every((h) => h.history[day]);
 }
 
-/** Grants (or, after an undo, revokes) today's perfect-day bonus: XP spread evenly over every stat. */
+/* ───────────────────────────── discipline from consistency ───────────────────────────── */
+
+export const DISCIPLINE_PERFECT_DAY = 10;
+export const DISCIPLINE_STREAK = 15;
+export const DISCIPLINE_CLEAN_DAY = 2;
+const DAILY_MILESTONES = [7, 14, 30, 60, 100, 200, 365];
+const WEEKLY_MILESTONES = [4, 8, 12, 26, 52];
+
+/** Discipline grows on its own from showing up: perfect days, streak milestones, clean days. */
+function grantDiscipline(tx: Tx, amount: number, source: string, day = tx.today): Reward | null {
+  if (!tx.s.hero || !tx.s.statDefs.some((d) => d.id === 'discipline')) return null;
+  return grantReward(tx, amount, ['discipline'], source, { day, live: false, deed: false, quiet: true });
+}
+
+/** Call right after a streak goes up. */
+function streakMilestone(tx: Tx, h: Habit, day = tx.today) {
+  const marks = h.frequency === 'weekly' && h.polarity === 'good' ? WEEKLY_MILESTONES : DAILY_MILESTONES;
+  if (marks.includes(h.streak)) grantDiscipline(tx, DISCIPLINE_STREAK, `${h.title}: ${h.streak}-${h.frequency === 'weekly' && h.polarity === 'good' ? 'week' : 'day'} streak`, day);
+}
+
+function mergeRewards(a: Reward, b: Reward | null): Reward {
+  if (!b) return a;
+  const stats = { ...a.stats };
+  for (const [k, v] of Object.entries(b.stats)) stats[k] = (stats[k] ?? 0) + v;
+  return { xp: a.xp + b.xp, gold: a.gold + b.gold, hp: a.hp + b.hp, stats, day: a.day };
+}
+
+/** Grants (or, after an undo, revokes) today's perfect-day bonus: XP spread evenly over every stat, plus Discipline. */
 function checkPerfectDay(tx: Tx) {
   const s = tx.s;
   const day = tx.today;
   const pd = (s.perfectDays ??= {});
   const perfect = isPerfectDay(s, day);
   if (perfect && !pd[day]) {
-    pd[day] = grantReward(tx, PERFECT_DAY_XP, s.statDefs.map((d) => d.id), 'Perfect Day', { live: false, deed: false });
+    const spread = grantReward(tx, PERFECT_DAY_XP, s.statDefs.map((d) => d.id), 'Perfect Day', { live: false, deed: false });
+    pd[day] = mergeRewards(spread, grantDiscipline(tx, DISCIPLINE_PERFECT_DAY, 'Perfect Day: Discipline'));
     tx.emit({ type: 'perfectday', xp: pd[day].xp });
   } else if (!perfect && pd[day]) {
     revokeReward(tx, pd[day], false);
@@ -430,12 +460,12 @@ export function createHero(state: GameState, input: NewHeroInput, ctx: Ctx): Res
     const has = (id: string) => tx.s.statDefs.some((d) => d.id === id);
     const tag = (...ids: string[]) => ids.filter(has);
     tx.s.habits.push(
-      makeHabit({ title: 'Train the body', difficulty: 'medium', statIds: tag('strength', 'vitality') }, tx.today),
-      makeHabit({ title: 'Read 20 pages', difficulty: 'easy', statIds: tag('intellect') }, tx.today),
-      makeHabit({ title: 'Meditate or journal', difficulty: 'easy', statIds: tag('wisdom') }, tx.today),
+      makeHabit({ title: 'Train the body', difficulty: 'medium', statIds: tag('body') }, tx.today),
+      makeHabit({ title: 'Read 20 pages', difficulty: 'easy', statIds: tag('mind') }, tx.today),
+      makeHabit({ title: 'Meditate or journal', difficulty: 'easy', statIds: tag('spirit') }, tx.today),
       makeHabit({ title: 'Doomscroll past midnight', difficulty: 'medium', statIds: tag('discipline'), polarity: 'bad' }, tx.today),
     );
-    tx.s.todos.push(makeTodo({ title: 'Reach out to an old friend', difficulty: 'easy', statIds: tag('charisma') }, tx.today));
+    tx.s.todos.push(makeTodo({ title: 'Reach out to an old friend', difficulty: 'easy', statIds: tag('spirit') }, tx.today));
   }
   tx.log('system', `${tx.s.hero.name} swore the Ashen Oath.`);
   return tx.done();
@@ -487,6 +517,7 @@ export function completeHabit(state: GameState, id: string, ctx: Ctx): Result {
   if (h.frequency === 'daily') {
     h.streak++;
     h.bestStreak = Math.max(h.bestStreak, h.streak);
+    streakMilestone(tx, h);
   }
   h.history[tx.today] = { ...reward, prevStreak, prevBest };
   checkPerfectDay(tx);
@@ -657,6 +688,7 @@ function creditPast(tx: Tx, h: Habit, day: string) {
   if (h.frequency === 'daily') {
     h.streak++;
     h.bestStreak = Math.max(h.bestStreak, h.streak);
+    streakMilestone(tx, h, day);
   }
   h.history[day] = { ...reward, prevStreak, prevBest };
 }
@@ -681,6 +713,8 @@ function settleDays(tx: Tx, done: Set<string>) {
         if (!h.slips[d]) {
           h.streak++;
           h.bestStreak = Math.max(h.bestStreak, h.streak);
+          grantDiscipline(tx, DISCIPLINE_CLEAN_DAY, `Resisted: ${h.title}`, d);
+          streakMilestone(tx, h, d);
         }
         continue;
       }
@@ -710,6 +744,7 @@ function settleDays(tx: Tx, done: Set<string>) {
         if (count >= h.perWeek) {
           h.streak++;
           h.bestStreak = Math.max(h.bestStreak, h.streak);
+          streakMilestone(tx, h, d);
         } else {
           h.streak = 0;
           dmg += damageFor(h.difficulty, s.settings.penalty) * Math.min(3, h.perWeek - count);

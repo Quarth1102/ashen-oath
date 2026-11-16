@@ -2,14 +2,15 @@ import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Dices } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { DEFAULT_LOOK, PURE, WANDERER, randomBackstory, randomName } from '../data/classes';
-import { DEFAULT_STATS } from '../data/stats';
+import { DEFAULT_LOOK, PARAGON, PURE, WANDERER, randomBackstory, randomName } from '../data/classes';
+import { DEFAULT_STATS, PILLAR_BLURB } from '../data/stats';
 import { REGIONS } from '../data/regions';
-import type { Appearance, StatDef } from '../game/types';
+import type { Appearance } from '../game/types';
 import HeroSprite from '../components/HeroSprite';
 import Landscape from '../components/Landscape';
 import AppearanceEditor from '../components/AppearanceEditor';
-import StatsEditor from '../components/StatsEditor';
+import { Icon } from '../components/Icon';
+import { rgba } from '../art/color';
 
 const STEPS = ['Visage', 'Legend', 'Pillars'];
 
@@ -23,7 +24,6 @@ export default function Onboarding() {
   const [appearance, setAppearance] = useState<Appearance>(DEFAULT_LOOK);
   const [name, setName] = useState('');
   const [backstory, setBackstory] = useState('');
-  const [defs, setDefs] = useState<StatDef[]>(() => DEFAULT_STATS.map((d) => ({ ...d })));
   const [starter, setStarter] = useState(true);
 
   const cls = WANDERER;
@@ -34,7 +34,7 @@ export default function Onboarding() {
     setStep(n);
   };
   const finish = () =>
-    createHero({ name, backstory, appearance, statDefs: defs.filter((d) => d.name.trim()), starterQuests: starter });
+    createHero({ name, backstory, appearance, statDefs: DEFAULT_STATS.map((d) => ({ ...d })), starterQuests: starter });
 
   if (step === -1) {
     return (
@@ -147,18 +147,21 @@ export default function Onboarding() {
               <div className="space-y-4">
                 <div>
                   <h2 className="h-display text-2xl font-bold">Your pillars</h2>
-                  <p className="mt-1 text-sm text-bone-faint">These are the stats your deeds will train. Rename, recolour, add or remove them. You can change them later in Settings.</p>
+                  <p className="mt-1 text-sm text-bone-faint">Every deed trains one of four pillars.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {DEFAULT_STATS.map((d) => (
+                    <div key={d.id} className="rounded-xl border p-3" style={{ borderColor: rgba(d.color, 0.35), background: rgba(d.color, 0.06) }}>
+                      <p className="flex items-center gap-1.5 font-display font-bold" style={{ color: d.color }}><Icon name={d.icon} size={15} /> {d.name}</p>
+                      <p className="mt-0.5 text-[11px] text-bone-faint">{PILLAR_BLURB[d.id]}</p>
+                      <p className="mt-1 text-[11px]" style={{ color: d.color }}>Rank: {PURE[d.id].name}</p>
+                    </div>
+                  ))}
                 </div>
                 <div className="panel-inset space-y-1.5 p-3 text-xs text-bone-dim">
-                  <p className="font-display text-sm font-bold text-ember-light">Your class is earned, not chosen</p>
-                  <p>At level 3 your class awakens from the stats you train most: Strength makes a {PURE.strength.name}, Wisdom a {PURE.wisdom.name}, Discipline a {PURE.discipline.name}. Train two stats evenly and you become a hybrid, like a Templar (Strength + Discipline). Keep all of them in balance and you may become an Ashen Paragon.</p>
+                  <p className="font-display text-sm font-bold text-ember-light">Your rank is earned, not chosen</p>
+                  <p>At level 3 your rank awakens from the pillar you train most. Train two evenly and you become a hybrid, like a Templar (Body + Discipline). Keep all four in balance and you become {PARAGON.name}. Discipline also grows on its own when you stay consistent.</p>
                 </div>
-                <StatsEditor
-                  defs={defs}
-                  onAdd={(d) => setDefs((x) => [...x, { ...d, id: `stat-${Date.now().toString(36)}` }])}
-                  onUpdate={(id, p) => setDefs((x) => x.map((d) => (d.id === id ? { ...d, ...p } : d)))}
-                  onRemove={(id) => setDefs((x) => x.filter((d) => d.id !== id))}
-                />
                 <label className="flex items-center gap-3 rounded-lg bg-ash-900/60 p-3 text-sm">
                   <input type="checkbox" checked={starter} onChange={(e) => setStarter(e.target.checked)} className="h-4 w-4 accent-[#e0a33a]" />
                   Start me with a few example quests
@@ -177,7 +180,7 @@ export default function Onboarding() {
               Next <ChevronRight size={16} />
             </button>
           ) : (
-            <button className="btn-primary flex-1" onClick={finish} disabled={!defs.some((d) => d.name.trim())}>Swear the Oath</button>
+            <button className="btn-primary flex-1" onClick={finish}>Swear the Oath</button>
           )}
         </div>
       </div>

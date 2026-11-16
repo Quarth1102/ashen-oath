@@ -5,7 +5,7 @@ import { useGame } from '../store/useGame';
 import { DIFFICULTIES, DIFFICULTY_LABEL, makeGoal, makeHabit, makeTodo, newId } from '../game/engine';
 import type { Difficulty, Goal, Habit, Todo } from '../game/types';
 import { WEEKDAY_SHORT } from '../game/dates';
-import { Segmented, Sheet, StatPicker } from './ui';
+import { PillarPicker, Segmented, Sheet } from './ui';
 import { useToday } from '../hooks';
 import { BASE_XP } from '../game/xp';
 
@@ -48,7 +48,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
     setTitle(it?.title ?? '');
     setNotes(it?.notes ?? '');
     setDifficulty(it?.difficulty ?? (target.kind === 'goal' ? 'hard' : 'easy'));
-    setStatIds(it?.statIds ?? []);
+    setStatIds((it?.statIds ?? []).slice(0, 1));
     setConfirmDel(false);
     setMsDraft('');
     if (target.kind === 'habit') {
@@ -69,7 +69,7 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
   }, [target]);
 
   const isNew = !target?.item;
-  const valid = title.trim().length > 0;
+  const valid = title.trim().length > 0 && statIds.length === 1;
 
   const save = () => {
     if (!valid || !target) return;
@@ -242,16 +242,8 @@ export default function ItemEditor({ target, onClose }: { target: EditTarget | n
         </div>
 
         <div className="space-y-2">
-          <p className="label">Trains which stats?</p>
-          <StatPicker defs={defs} value={statIds} onChange={setStatIds} />
-          <p className="text-[11px] text-bone-faint">
-            XP is split across the stats you pick.{' '}
-            {statIds.length ? (
-              <>Filed under <span style={{ color: defs.find((d) => d.id === statIds[0])?.color }}>{defs.find((d) => d.id === statIds[0])?.name}</span> (the first one you picked).</>
-            ) : (
-              'With none picked, it is filed under Untagged.'
-            )}
-          </p>
+          <p className="label">Which pillar does it train?</p>
+          <PillarPicker defs={defs} value={statIds[0]} onChange={(id) => setStatIds([id])} />
         </div>
 
         {(kind === 'todo' || kind === 'goal') && (
