@@ -39,6 +39,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'perfect_7', name: 'Seven Seals', desc: 'Earn 7 perfect days.', icon: 'gem', gold: 150, title: 'the Flawless', check: (s) => Object.keys(s.perfectDays ?? {}).length >= 7 },
   { id: 'combo_5', name: 'Chain of Deeds', desc: 'Reach a ×5 combo.', icon: 'flame', gold: 30, check: (s) => (s.combo?.count ?? 0) >= 5 },
   { id: 'builder', name: 'Camp-Builder', desc: 'Make 5 camp upgrades.', icon: 'tent', gold: 100, title: 'the Builder', check: (s) => Object.values(s.camp?.tiers ?? {}).reduce((a, b) => a + (b ?? 0), 0) >= 5 },
+  { id: 'questline_1', name: 'Quest-Taker', desc: 'Finish all of a day’s quests.', icon: 'scroll', gold: 25, check: (s) => (s.questLinesDone ?? 0) >= 1 },
+  { id: 'questline_7', name: 'Questbound', desc: 'Finish 7 daily quest lines.', icon: 'castle', gold: 150, title: 'the Questbound', check: (s) => (s.questLinesDone ?? 0) >= 7 },
   { id: 'chest_1', name: 'Lucky Find', desc: 'Open a loot chest.', icon: 'gift', gold: 10, check: (s) => s.counters.chestsOpened >= 1 },
 ];
 

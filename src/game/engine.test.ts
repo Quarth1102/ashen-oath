@@ -768,3 +768,75 @@ describe('four pillars', () => {
     expect(totalStatXp(s.hero!.stats.discipline)).toBe(E.DISCIPLINE_CLEAN_DAY + E.DISCIPLINE_STREAK);
   });
 });
+
+describe('daily quests', () => {
+  it('raises numbers in habit titles by half', async () => {
+    const { boostTitle } = await import('../data/dailyQuests');
+    expect(boostTitle('Walk 10,000 steps')).toBe('Walk 15,000 steps');
+    expect(boostTitle('Read 20 pages')).toBe('Read 30 pages');
+    expect(boostTitle('Meditate 10 min')).toBe('Meditate 15 min');
+    expect(boostTitle('Drink 2 litres')).toBe('Drink 3 litres');
+    expect(boostTitle('Journal')).toBeNull();
+  });
+
+  it('generates three quests at the reset, always one for the weakest pillar', () => {
+    let s = withHero();
+    s.hero!.stats.body = { level: 5, xp: 0 };
+    s.hero!.stats.mind = { level: 4, xp: 0 };
+    s.hero!.stats.discipline = { level: 3, xp: 0 }; // spirit (level 1) is weakest
+    addHabit(s, { title: 'Walk 10,000 steps', statIds: ['body'] });
+    s = E.processDay(s, ctx(at(NOON, 1))).state;
+    const line = s.dailyQuests!;
+    expect(line.day).toBe('2026-11-12');
+    expect(line.quests).toHaveLength(3);
+    expect(line.quests[0].pillar).toBe('spirit');
+    const boost = line.quests.find((q) => q.kind === 'boost');
+    expect(boost?.title).toBe('Walk 15,000 steps');
+    // next day: a brand-new line
+    const next = E.processDay(s, ctx(at(NOON, 2))).state.dailyQuests!;
+    expect(next.day).toBe('2026-11-13');
+  });
+
+  it('rewards manual quests, tracks count quests, and pays a chest for the full line', () => {
+    let s = withHero();
+    blockPerfect(s);
+    const a = addHabit(s, { title: 'Read', statIds: ['mind'], days: [] });
+    const b = addHabit(s, { title: 'Study', statIds: ['mind'], days: [] });
+    s.dailyQuests = {
+      day: '2026-11-11', rerolls: 1,
+      quests: [
+        { id: 'q1', kind: 'challenge', pillar: 'spirit', title: 'Meditate', detail: '', xp: 30, done: false },
+        { id: 'q2', kind: 'count', pillar: 'mind', title: 'Complete 2 Mind deeds', detail: '', xp: 35, target: 2, progress: 0, done: false },
+      ],
+    };
+    s = E.completeDailyQuest(s, 'q1', ctx()).state;
+    expect(totalStatXp(s.hero!.stats.spirit)).toBe(30);
+    expect(E.completeDailyQuest(s, 'q2', ctx()).state.dailyQuests!.quests[1].done).toBe(false); // count quests can't be ticked by hand
+    s = E.completeHabit(s, a, ctx(at(NOON, 0, 1))).state;
+    expect(s.dailyQuests!.quests[1].progress).toBe(1);
+    const chests = s.pendingChests;
+    const r = E.completeHabit(s, b, ctx(at(NOON, 0, 2)));
+    s = r.state;
+    expect(s.dailyQuests!.quests[1].done).toBe(true);
+    expect(s.dailyQuests!.bonus).toBeTruthy();
+    expect(s.pendingChests).toBe(chests + 1);
+    expect(r.events.some((e) => e.type === 'questline')).toBe(true);
+    expect(s.questLinesDone).toBe(1);
+    // undoing a deed rolls the count quest and the bonus back
+    s = E.uncompleteHabit(s, b, ctx(at(NOON, 0, 2))).state;
+    expect(s.dailyQuests!.quests[1].done).toBe(false);
+    expect(s.dailyQuests!.bonus).toBeUndefined();
+    expect(s.pendingChests).toBe(chests);
+    expect(s.questLinesDone).toBe(0);
+  });
+
+  it('allows one reroll per day', () => {
+    let s = withHero();
+    const before = s.dailyQuests!.quests[0];
+    s = E.rerollDailyQuest(s, before.id, ctx(NOON, 0.3)).state;
+    expect(s.dailyQuests!.quests[0].id).not.toBe(before.id);
+    expect(s.dailyQuests!.rerolls).toBe(0);
+    const again = E.rerollDailyQuest(s, s.dailyQuests!.quests[1].id, ctx()).state;
+    expect(again.dailyQuests!.quests[1].id).toBe(s.dailyQuests!.quests[1].id);
+  });
+});

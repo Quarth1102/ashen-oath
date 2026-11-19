@@ -56,6 +56,9 @@ interface Store extends GameState {
   removeStat: (id: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   toggleCollapsed: (key: string) => void;
+  completeDailyQuest: (id: string) => void;
+  uncompleteDailyQuest: (id: string) => void;
+  rerollDailyQuest: (id: string) => void;
   startVacation: (until?: string) => void;
   endVacation: () => void;
   buyUpgrade: (line: UpgradeLineId) => void;
@@ -72,7 +75,7 @@ const pickState = (s: Store): GameState => ({
   log: s.log, achievements: s.achievements, settings: s.settings, lastProcessedDay: s.lastProcessedDay, pendingReview: s.pendingReview ?? null,
   pendingChests: s.pendingChests, dayActivity: s.dayActivity, counters: s.counters,
   dayXp: s.dayXp, dayGold: s.dayGold, dayStats: s.dayStats, perfectDays: s.perfectDays, vacationDays: s.vacationDays,
-  combo: s.combo, camp: s.camp, lastRecapWeek: s.lastRecapWeek,
+  combo: s.combo, camp: s.camp, lastRecapWeek: s.lastRecapWeek, dailyQuests: s.dailyQuests, questLinesDone: s.questLinesDone,
 });
 
 const upsert = <T extends { id: string }>(list: T[], item: T) =>
@@ -126,6 +129,9 @@ export const useGame = create<Store>()(
       updateStat: (id, patch) => getState().run((s, c) => E.updateStat(s, id, patch, c)),
       removeStat: (id) => getState().run((s, c) => E.removeStat(s, id, c)),
       updateSettings: (patch) => setState((s) => ({ settings: { ...s.settings, ...patch } })),
+      completeDailyQuest: (id) => getState().run((s, c) => E.completeDailyQuest(s, id, c)),
+      uncompleteDailyQuest: (id) => getState().run((s, c) => E.uncompleteDailyQuest(s, id, c)),
+      rerollDailyQuest: (id) => getState().run((s, c) => E.rerollDailyQuest(s, id, c)),
       startVacation: (until) => getState().run((s, c) => E.startVacation(s, until, c)),
       endVacation: () => getState().run((s, c) => E.endVacation(s, c)),
       buyUpgrade: (line) => getState().run((s, c) => E.buyUpgrade(s, line, c)),

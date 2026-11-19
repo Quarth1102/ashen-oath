@@ -8,6 +8,7 @@ import Landscape from '../components/Landscape';
 import HeroScene, { type SceneActivity } from '../components/HeroScene';
 import AmbientSound from '../components/AmbientSound';
 import BackupNudge from '../components/BackupNudge';
+import DailyQuests from '../components/DailyQuests';
 import { parseDay } from '../game/dates';
 import { activityCaption } from '../game/activity';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
@@ -143,6 +144,8 @@ export default function Camp() {
           <button className="btn-ghost px-3 py-2 text-xs" onClick={endVacation}>Return</button>
         </div>
       )}
+
+      <DailyQuests />
 
       <section>
         <div className="mb-2 flex items-end justify-between">

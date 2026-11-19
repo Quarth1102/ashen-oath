@@ -18,7 +18,7 @@ import { rgba } from '../art/color';
 
 const MODAL_TYPES = ['fall', 'dayreport', 'levelup', 'classchange', 'wardrobe', 'perfectday', 'region', 'goal', 'loot', 'weeklyrecap'] as const;
 type ModalEvent = Extract<GameEvent, { type: (typeof MODAL_TYPES)[number] }>;
-const TOAST_TYPES = ['achievement', 'statup', 'chest', 'damage'] as const;
+const TOAST_TYPES = ['achievement', 'statup', 'chest', 'damage', 'questline'] as const;
 
 export default function EventLayer() {
   const events = useGame((s) => s.events);
@@ -43,6 +43,10 @@ export default function EventLayer() {
     if (has('levelup')) {
       if (sfx) setTimeout(playLevelUp, deed ? 350 : 0);
       if (haptic) setTimeout(() => buzz([30, 60, 30, 60, 90]), 350);
+    }
+    if (has('questline')) {
+      if (sfx) setTimeout(playPerfectDay, 350);
+      if (haptic) setTimeout(() => buzz([20, 50, 20, 50, 100]), 350);
     }
     if (has('perfectday')) {
       if (sfx) setTimeout(playPerfectDay, 500);
@@ -109,6 +113,10 @@ function Toast({ event, onDone }: { event: GameEvent; onDone: () => void }) {
     icon = <Gift size={18} />;
     title = 'A loot chest dropped!';
     body = 'Open it in your Camp for gold.';
+  } else if (event.type === 'questline') {
+    icon = <Gift size={18} />;
+    title = 'Quest line complete!';
+    body = 'A loot chest appears in your Camp.';
   } else if (event.type === 'damage') {
     color = '#ff5a64';
     icon = <HeartCrack size={18} />;

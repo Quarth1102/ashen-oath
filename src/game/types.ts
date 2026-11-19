@@ -141,6 +141,30 @@ export interface LogEntry {
   text: string;
 }
 
+export interface DailyQuest {
+  id: string;
+  /** challenge: a fresh task · boost: a harder version of a habit · count: N deeds of a pillar (auto-tracked) */
+  kind: 'challenge' | 'boost' | 'count';
+  pillar: string;
+  title: string;
+  detail: string;
+  habitId?: string;
+  target?: number;
+  progress?: number;
+  xp: number;
+  done: boolean;
+  reward?: Reward;
+}
+
+export interface DailyQuestLine {
+  day: string;
+  quests: DailyQuest[];
+  rerolls: number;
+  /** bonus for finishing all of them */
+  bonus?: Reward;
+  bonusChest?: boolean;
+}
+
 export interface ReviewItem {
   /** `${habitId}@${day}` for a daily habit, `${habitId}@${sunday}#${n}` for the n-th missing weekly session */
   key: string;
@@ -220,6 +244,10 @@ export interface GameState {
   camp?: CampState;
   /** Monday of the week the last weekly recap was shown for */
   lastRecapWeek?: string;
+  /** today's generated quests */
+  dailyQuests?: DailyQuestLine | null;
+  /** how many full daily quest lines were finished */
+  questLinesDone?: number;
   counters: Counters;
 }
 
@@ -239,7 +267,8 @@ export type GameEvent =
   | { id: string; type: 'combo'; count: number }
   | { id: string; type: 'perfectday'; xp: number }
   | { id: string; type: 'weeklyrecap'; week: string }
-  | { id: string; type: 'wardrobe'; items: string[] };
+  | { id: string; type: 'wardrobe'; items: string[] }
+  | { id: string; type: 'questline' };
 
 export type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 export type NewEvent = DistributiveOmit<GameEvent, 'id'>;

@@ -12,6 +12,8 @@ import { FALL_GOLD_LOSS, damageFor, regenFor } from './penalty';
 import { LOOT_CHANCE, RARITY_GOLD, goldFor, rollRarity } from './economy';
 import { GEAR_BY_ID } from '../data/gear';
 import { availableGear, canWear, rankSet } from './wardrobe';
+import { generateQuestLine, rerolled } from './dailyQuests';
+import { QUEST_XP } from '../data/dailyQuests';
 import { classBonus, determineClassId, normalizeClassId, resolveClass, CLASS_UNLOCK_LEVEL } from './classes';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { regionsUnlockedBetween } from '../data/regions';
@@ -467,6 +469,7 @@ export function createHero(state: GameState, input: NewHeroInput, ctx: Ctx): Res
     );
     tx.s.todos.push(makeTodo({ title: 'Reach out to an old friend', difficulty: 'easy', statIds: tag('spirit') }, tx.today));
   }
+  ensureQuestLine(tx);
   tx.log('system', `${tx.s.hero.name} swore the Ashen Oath.`);
   return tx.done();
 }
@@ -507,6 +510,7 @@ export function completeHabit(state: GameState, id: string, ctx: Ctx): Result {
     const n = logsOn(h, tx.today) + 1;
     const reward = grantReward(tx, BASE_XP[h.difficulty] * mult, h.statIds, `${h.title} ×${n}`, { regen: regenFor(h.difficulty) });
     ((h.extra ??= {})[tx.today] ??= []).push(reward);
+    questProgress(tx, h.statIds, 1);
     checkAchievements(tx);
     return tx.done();
   }
@@ -520,6 +524,7 @@ export function completeHabit(state: GameState, id: string, ctx: Ctx): Result {
     streakMilestone(tx, h);
   }
   h.history[tx.today] = { ...reward, prevStreak, prevBest };
+  questProgress(tx, h.statIds, 1);
   checkPerfectDay(tx);
   checkAchievements(tx);
   return tx.done();
@@ -535,12 +540,14 @@ export function uncompleteHabit(state: GameState, id: string, ctx: Ctx): Result 
   if (extras?.length) {
     revokeReward(tx, extras.pop()!);
     if (!extras.length) delete h.extra![tx.today];
+    questProgress(tx, h.statIds, -1);
     return tx.done();
   }
   revokeReward(tx, c);
   h.streak = c.prevStreak;
   h.bestStreak = c.prevBest;
   delete h.history[tx.today];
+  questProgress(tx, h.statIds, -1);
   checkPerfectDay(tx);
   return tx.done();
 }
@@ -583,6 +590,7 @@ export function completeTodo(state: GameState, id: string, ctx: Ctx): Result {
   t.done = true;
   t.doneDay = tx.today;
   tx.s.counters.todosDone++;
+  questProgress(tx, t.statIds, 1);
   checkAchievements(tx);
   return tx.done();
 }
@@ -592,6 +600,7 @@ export function uncompleteTodo(state: GameState, id: string, ctx: Ctx): Result {
   const t = findTodo(tx.s, id);
   if (!t || !t.done) return tx.done();
   if (t.reward) revokeReward(tx, t.reward);
+  if (t.doneDay === tx.today) questProgress(tx, t.statIds, -1);
   t.done = false;
   t.doneDay = undefined;
   t.reward = undefined;
@@ -630,10 +639,12 @@ export function toggleMilestone(state: GameState, goalId: string, milestoneId: s
   if (!m.done) {
     m.reward = grantReward(tx, BASE_XP[g.difficulty] * MILESTONE_MULT, g.statIds, `Milestone: ${m.title}`);
     m.done = true;
+    questProgress(tx, g.statIds, 1);
     if (g.milestones.every((x) => x.done)) finishGoal(tx, g);
   } else {
     unfinishGoal(tx, g);
     if (m.reward) revokeReward(tx, m.reward);
+    if (m.reward?.day === tx.today) questProgress(tx, g.statIds, -1);
     m.done = false;
     m.reward = undefined;
   }
@@ -790,6 +801,7 @@ export function processDay(state: GameState, ctx: Ctx): Result {
   const tx = new Tx(state, ctx);
   const s = tx.s;
   if (!s.hero) return tx.done();
+  ensureQuestLine(tx);
   if (!s.lastProcessedDay) {
     s.lastProcessedDay = tx.today;
     return tx.done();
@@ -864,6 +876,93 @@ export function customizeCamp(state: GameState, patch: Partial<Pick<CampState, '
   const camp = campOf(tx.s);
   if (patch.pet && !camp.pets.includes(patch.pet)) delete patch.pet;
   Object.assign(camp, patch);
+  return tx.done();
+}
+
+/* ───────────────────────────── daily quests ───────────────────────────── */
+
+/** A fresh quest line each game day (generated lazily at the first check of the day). */
+function ensureQuestLine(tx: Tx) {
+  const s = tx.s;
+  if (!s.hero || s.dailyQuests?.day === tx.today) return;
+  s.dailyQuests = generateQuestLine(s, tx.today, tx.ctx.rng);
+}
+
+/** Deeds of a pillar move that pillar's "complete N deeds" quest along (or back, on undo). */
+function questProgress(tx: Tx, statIds: string[], delta: number) {
+  const line = tx.s.dailyQuests;
+  const pillar = statIds[0];
+  if (!line || line.day !== tx.today || !pillar) return;
+  for (const q of line.quests) {
+    if (q.kind !== 'count' || q.pillar !== pillar) continue;
+    q.progress = Math.max(0, (q.progress ?? 0) + delta);
+    if (!q.done && q.progress >= (q.target ?? 1)) {
+      q.done = true;
+      q.reward = grantReward(tx, q.xp, [q.pillar], `Daily quest: ${q.title}`, { live: false, deed: false, quiet: true });
+    } else if (q.done && q.progress < (q.target ?? 1)) {
+      if (q.reward) revokeReward(tx, q.reward, false);
+      q.done = false;
+      q.reward = undefined;
+    }
+  }
+  checkQuestLine(tx);
+}
+
+/** Finishing every quest of the day: a loot chest and bonus XP across all pillars. Undone if a quest is undone. */
+function checkQuestLine(tx: Tx) {
+  const s = tx.s;
+  const line = s.dailyQuests;
+  if (!line || !s.hero) return;
+  const all = line.quests.length > 0 && line.quests.every((q) => q.done);
+  if (all && !line.bonus) {
+    line.bonus = grantReward(tx, QUEST_XP.bonus, s.statDefs.map((d) => d.id), 'Quest line complete', { live: false, deed: false, quiet: true });
+    s.pendingChests++;
+    line.bonusChest = true;
+    s.questLinesDone = (s.questLinesDone ?? 0) + 1;
+    tx.emit({ type: 'questline' });
+    tx.log('loot', 'Completed the day’s quest line. A loot chest appears.');
+    checkAchievements(tx);
+  } else if (!all && line.bonus) {
+    revokeReward(tx, line.bonus, false);
+    if (line.bonusChest && s.pendingChests > 0) s.pendingChests--;
+    line.bonus = undefined;
+    line.bonusChest = false;
+    s.questLinesDone = Math.max(0, (s.questLinesDone ?? 0) - 1);
+  }
+}
+
+/** Mark a challenge or boost quest as done (count quests track themselves). */
+export function completeDailyQuest(state: GameState, id: string, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  const q = tx.s.dailyQuests?.day === tx.today ? tx.s.dailyQuests.quests.find((x) => x.id === id) : undefined;
+  if (!q || q.done || q.kind === 'count') return tx.done();
+  q.reward = grantReward(tx, q.xp, [q.pillar], `Daily quest: ${q.title}`);
+  q.done = true;
+  checkQuestLine(tx);
+  checkAchievements(tx);
+  return tx.done();
+}
+
+export function uncompleteDailyQuest(state: GameState, id: string, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  const q = tx.s.dailyQuests?.day === tx.today ? tx.s.dailyQuests.quests.find((x) => x.id === id) : undefined;
+  if (!q || !q.done || q.kind === 'count') return tx.done();
+  if (q.reward) revokeReward(tx, q.reward);
+  q.done = false;
+  q.reward = undefined;
+  checkQuestLine(tx);
+  return tx.done();
+}
+
+/** Swap one unfinished quest for another (limited per day). */
+export function rerollDailyQuest(state: GameState, id: string, ctx: Ctx): Result {
+  const tx = new Tx(state, ctx);
+  const line = tx.s.dailyQuests;
+  if (!line || line.day !== tx.today || line.rerolls <= 0) return tx.done();
+  const i = line.quests.findIndex((x) => x.id === id);
+  if (i < 0 || line.quests[i].done) return tx.done();
+  line.quests[i] = rerolled(tx.s, line, line.quests[i], ctx.rng);
+  line.rerolls--;
   return tx.done();
 }
 
