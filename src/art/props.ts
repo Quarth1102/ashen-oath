@@ -341,15 +341,72 @@ export function pond(r: Region): Strip {
   );
 }
 
-/** Rolled-out sleeping mat with a pillow, 26×5. */
+/** Rolled-out sleeping mat with a pillow at the left, 40×5. */
 export function bedroll(): Strip {
   return memo('bedroll', () =>
-    strip(26, 5, 1, (px) => {
-      rect(px, 0, 2, 26, 3, '#5e1219');
-      rect(px, 0, 2, 26, 1, '#7a1f2b');
-      for (let x = 3; x < 26; x += 5) px(x, 3, '#a3202d');
-      rect(px, 0, 1, 6, 3, '#b5ab9b');
-      rect(px, 0, 1, 6, 1, '#d8cfbf');
+    strip(40, 5, 1, (px) => {
+      rect(px, 0, 2, 40, 3, '#5e1219');
+      rect(px, 0, 2, 40, 1, '#7a1f2b');
+      for (let x = 11; x < 40; x += 5) px(x, 3, '#a3202d');
+      rect(px, 0, 1, 10, 3, '#b5ab9b');
+      rect(px, 0, 1, 10, 1, '#d8cfbf');
+    }),
+  );
+}
+
+/**
+ * The hero lying flat on their back under a blanket, seen from the side: head on the
+ * pillow at the left, feet at the right. Two frames: the chest rises and falls. 40×11.
+ */
+export function sleeper(skin: string, hairStyle: string, hair: string): Strip {
+  return memo(`sleeper-${skin}-${hairStyle}-${hair}`, () =>
+    strip(40, 11, 2, (px, f) => {
+      const o = 1; // leave room for the outline
+      const sk = skin;
+      const skD = shade(skin, -0.18);
+      // head in profile, face turned up: crown at the left, chin at the right
+      const face: [number, number][] = [[1, 5], [2, 4], [3, 3], [4, 3], [5, 2], [6, 4], [7, 4]]; // [x, top row]
+      for (const [x, t] of face) rect(px, o + x, t, 1, (x === 7 ? 7 : 9) - t, sk);
+      px(o + 5, 3, skD); // nostril shadow under the nose
+      rect(px, o + 1, 8, 6, 1, skD); // back of the head, in shadow
+      px(o + 3, 6, skD); // ear
+      px(o + 4, 4, '#2a1a1a'); // closed eye
+      px(o + 3, 4, shade(skin, -0.3));
+      px(o + 6, 5, shade(skin, -0.35)); // mouth
+      if (hairStyle !== 'bald') {
+        rect(px, o + 0, 5, 2, 4, hair); // crown against the pillow
+        px(o + 1, 4, hair);
+        px(o + 2, 3, hair);
+        rect(px, o + 1, 8, 3, 1, hair);
+        if (hairStyle === 'long' || hairStyle === 'braid' || hairStyle === 'wild') {
+          rect(px, o - 1, 6, 1, 4, hair); // spilling over the pillow
+          rect(px, o + 1, 9, 4, 1, hair);
+        }
+        if (hairStyle === 'wild') { px(o - 1, 4, hair); px(o, 3, hair); }
+        if (hairStyle === 'mohawk') { px(o - 1, 5, hair); px(o - 1, 6, hair); }
+        px(o + 1, 5, shade(hair, 0.2));
+      }
+      // the blanket: a low mound over chest, belly, legs, with feet poking up at the end
+      const wool = '#7a1f2b';
+      const woolD = '#5e1219';
+      const top = (x: number) => {
+        if (x < 11) return 4; // folded edge at the chin
+        if (x < 21) return 4 - (f === 1 && x > 12 && x < 19 ? 1 : 0); // chest, breathing
+        if (x < 26) return 5; // belly
+        if (x < 33) return 6; // legs
+        if (x < 37) return 4; // feet
+        return 6;
+      };
+      for (let x = 8; x < 38; x++) {
+        const t = top(x);
+        rect(px, o + x, t, 1, 10 - t, wool);
+        rect(px, o + x, 9, 1, 1, woolD);
+        if (x % 6 === 2) rect(px, o + x, t + 1, 1, 8 - t, '#a3202d'); // stripes
+      }
+      rect(px, o + 8, 4, 3, 1, '#d8cfbf'); // folded linen edge under the chin
+      rect(px, o + 8, 5, 3, 2, '#b5ab9b');
+      rect(px, o + 20, 7, 1, 2, woolD); // a fold where the legs begin
+      rect(px, o + 33, 4, 4, 1, shade(wool, 0.15));
     }),
   );
 }

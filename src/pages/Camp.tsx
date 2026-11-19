@@ -102,7 +102,7 @@ export default function Camp() {
   return (
     <div className="space-y-5">
       <div className="relative -mx-4 -mt-4 md:mx-0 md:mt-0">
-        <Landscape region={region} className="h-[46vh] min-h-[300px] w-full md:rounded-2xl md:ring-1 md:ring-ash-600/50">
+        <Landscape region={region} travel={doing === 'wander'} className="h-[46vh] min-h-[300px] w-full md:rounded-2xl md:ring-1 md:ring-ash-600/50">
           {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={cheer} camp={camp} perfect={perfect} combo={comboLive} />}
         </Landscape>
         <AmbientSound activity={doing} />

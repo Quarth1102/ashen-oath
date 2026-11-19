@@ -85,8 +85,10 @@ function drawLegs(g: Grid, lift: 'left' | 'right' | 'none' = 'none') {
     g.rect(bx, 28 - up, 4, 1, shade(BOOTS, 0.15));
   };
   g.rect(15, 23, 2, 1, PANTS);
-  leg(12, 11, lift === 'left' ? 1 : 0);
-  leg(17, 17, lift === 'right' ? 1 : 0);
+  // mid-step the lifted foot swings forward (right) and the planted one pushes back
+  const fwd = (side: 'left' | 'right') => (lift === side ? 1 : lift === 'none' ? 0 : -1);
+  leg(12, 11 + fwd('left'), lift === 'left' ? 1 : 0);
+  leg(17, 17 + fwd('right'), lift === 'right' ? 1 : 0);
 }
 
 /** cross-legged, seen from the front */
@@ -195,7 +197,7 @@ function drawCloakCollar(g: Grid, c: GearLook, oy: number) {
   g.set(18, 15 + oy, c.trim);
 }
 
-function drawHead(g: Grid, ap: Appearance, oy: number, closed = false) {
+function drawHead(g: Grid, ap: Appearance, oy: number, closed = false, glance = false) {
   const s = ap.skin;
   g.rect(14, 14 + oy, 4, 1, shade(s, -0.2));
   g.rect(12, 6 + oy, 8, 8, s);
@@ -218,6 +220,11 @@ function drawHead(g: Grid, ap: Appearance, oy: number, closed = false) {
     }
     g.set(14, 10 + oy, ap.eyeColor);
     g.set(17, 10 + oy, ap.eyeColor);
+    if (glance && !glow) {
+      // looking down the road, to the right
+      g.set(17, 10 + oy, '#e8dfcf');
+      g.set(18, 10 + oy, ap.eyeColor);
+    }
     if (glow) {
       g.set(13, 10 + oy, shade(ap.eyeColor, -0.3));
       g.set(18, 10 + oy, shade(ap.eyeColor, -0.3));
@@ -466,7 +473,7 @@ export function renderHeroGrid(look: SpriteLook, frame = 0, pose: Pose = 'idle')
     for (let y = 19 + oy; y < 31; y += 4) g.rect(9, y, 14, 1, shade(wool, -0.25));
     g.rect(22, 17 + oy, 1, 14 - oy, shade(wool, -0.3));
   }
-  drawHead(g, ap, oy, sleeping);
+  drawHead(g, ap, oy, sleeping, pose === 'walk');
   const hairHidden = helm && (helm.style === 'greathelm' || helm.style === 'hood');
   if (!hairHidden) drawHair(g, ap, oy);
   if (helm && pose !== 'sleep') drawHelm(g, helm, ap, oy);

@@ -79,3 +79,8 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .sprite-idle, .sprite-anim, .flame, .fog-drift, .rays { animation: none !important; }
 }
+
+@keyframes journey-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--shift)); }
+}

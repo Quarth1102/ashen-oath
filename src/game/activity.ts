@@ -46,7 +46,7 @@ export function activityCaption(a: Activity, name: string): string {
     case 'sleep': return `${name} sleeps beside the dying embers.`;
     case 'camp': return `${name} rests by the campfire.`;
     case 'fish': return `${name} is fishing at the water’s edge.`;
-    case 'wander': return `${name} wanders the land.`;
+    case 'wander': return `${name} travels the road.`;
     case 'watch': return `${name} keeps watch.`;
   }
 }

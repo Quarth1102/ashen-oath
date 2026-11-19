@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring, useTransform, type MotionValue } from 'framer-motion';
 import { GROUND_Y, LH, LW, regionLayers } from '../art/landscape';
+import { journeyLayers, type JourneyLayer } from '../art/journey';
 import type { ParticleKind, Region } from '../data/regions';
 import { rgba } from '../art/color';
 
@@ -10,6 +11,8 @@ interface Props {
   /** rendered standing on the ground, centred */
   children?: (groundPx: number, scale: number) => ReactNode;
   interactive?: boolean;
+  /** the hero is on the road: scenery scrolls past endlessly */
+  travel?: boolean;
 }
 
 function timeTint(hour: number): string {
@@ -31,7 +34,28 @@ function Layer({ src, x, scale }: { src: string; x: MotionValue<number>; scale: 
   );
 }
 
-export default function Landscape({ region, className = '', children, interactive = true }: Props) {
+/** One endlessly scrolling, horizontally tiled layer of the travelling scene. */
+function Road({ layer, scale, width, reduce }: { layer: JourneyLayer; scale: number; width: number; reduce: boolean }) {
+  const tile = layer.width * scale;
+  const copies = Math.ceil(width / tile) + 1;
+  return (
+    <div
+      className="pixelated pointer-events-none absolute bottom-0 left-0"
+      style={{
+        width: tile * copies,
+        height: LH * scale,
+        backgroundImage: `url(${layer.src})`,
+        backgroundSize: `${tile}px ${LH * scale}px`,
+        backgroundRepeat: 'repeat-x',
+        ['--shift' as string]: `${-tile}px`,
+        animation: reduce ? undefined : `journey-scroll ${layer.width / layer.speed}s linear infinite`,
+        willChange: 'transform',
+      }}
+    />
+  );
+}
+
+export default function Landscape({ region, className = '', children, interactive = true, travel = false }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 360, h: 260 });
   const reduce = useReducedMotion();
@@ -69,6 +93,7 @@ export default function Landscape({ region, className = '', children, interactiv
   }, [interactive, reduce, raw]);
 
   const layers = useMemo(() => regionLayers(region), [region]);
+  const road = useMemo(() => (travel ? journeyLayers(region) : null), [region, travel]);
   const tint = timeTint(new Date().getHours());
 
   return (
@@ -83,16 +108,29 @@ export default function Landscape({ region, className = '', children, interactiv
           transition={{ duration: 0.9, ease: 'easeOut' }}
         >
           <Layer src={layers.sky} x={still} scale={scale} />
-          <Layer src={layers.far} x={farX} scale={scale} />
-          <Layer src={layers.mid} x={midX} scale={scale} />
-          <Particles kind={region.particle} accent={region.accent} scale={scale} x={midX} reduce={!!reduce} />
-          <Fog color={region.sky[1]} groundPx={groundPx} />
-          <Layer src={layers.near} x={nearX} scale={scale} />
+          {road ? (
+            <motion.div key="road" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>
+              <Road layer={road.far} scale={scale} width={box.w} reduce={!!reduce} />
+              <Road layer={road.mid} scale={scale} width={box.w} reduce={!!reduce} />
+              <Particles kind={region.particle} accent={region.accent} scale={scale} x={still} reduce={!!reduce} />
+              <Fog color={region.sky[1]} groundPx={groundPx} />
+              <Road layer={road.near} scale={scale} width={box.w} reduce={!!reduce} />
+            </motion.div>
+          ) : (
+            <>
+              <Layer src={layers.far} x={farX} scale={scale} />
+              <Layer src={layers.mid} x={midX} scale={scale} />
+              <Particles kind={region.particle} accent={region.accent} scale={scale} x={midX} reduce={!!reduce} />
+              <Fog color={region.sky[1]} groundPx={groundPx} />
+              <Layer src={layers.near} x={nearX} scale={scale} />
+            </>
+          )}
         </motion.div>
       </AnimatePresence>
-      <motion.div className="absolute inset-0" style={{ x: nearX }}>
+      <motion.div className="absolute inset-0" style={{ x: road ? still : nearX }}>
         {children?.(groundPx, scale)}
       </motion.div>
+      {road && <Road layer={road.front} scale={scale} width={box.w} reduce={!!reduce} />}
       <div className="pointer-events-none absolute inset-0 mix-blend-multiply" style={{ background: tint }} />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-void/80 to-transparent" />
     </div>

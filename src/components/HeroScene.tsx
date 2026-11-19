@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'framer-motion';
+import type { CSSProperties } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import HeroSprite from './HeroSprite';
 import type { SpriteLook } from '../art/sprite';
-import { banner, bedroll, campfire, dock, embers, lanternPost, pet, pond, rack, tent, type Strip } from '../art/props';
+import { banner, bedroll, sleeper, campfire, dock, embers, lanternPost, pet, pond, rack, tent, type Strip } from '../art/props';
 import { DEFAULT_CAMP, FIRE_COLORS, tierOf, type CampState } from '../data/camp';
 import type { Region } from '../data/regions';
 import type { Activity } from '../game/activity';
@@ -124,19 +124,17 @@ export default function HeroScene({ look, activity, region, ground, scale, zoom 
 
           {activity === 'sleep' && (
             <>
-              {campsite(24, false)}
-              {petAt(15)}
-              <Prop strip={bedroll()} u={u} style={at(0, 26, u, feet)} />
-              <div className="absolute" style={{ ...at(1, 32, u, feet + 3 * u - 9 * u), transform: 'rotate(-90deg)' }}>
-                <HeroSprite look={look} size={size} pose="sleep" shadow={false} celebrate={celebrate} />
-              </div>
-              <Zzz u={u} style={at(-9, 0, u, feet + 9 * u)} />
+              {campsite(40, false)}
+              {petAt(58)}
+              <Prop strip={bedroll()} u={u} style={at(6, 40, u, feet)} />
+              <Prop strip={sleeper(look.appearance.skin, look.appearance.hairStyle, look.appearance.hairColor)} u={u} style={at(6, 40, u, feet + 2 * u)} speed={1.8} />
+              <Zzz u={u} style={at(-9, 0, u, feet + 11 * u)} />
             </>
           )}
 
           {activity === 'fish' && <Fishing look={look} region={region} u={u} size={size} base={base} feet={feet} aura={aura} celebrate={celebrate} hasDock={tierOf(camp, 'dock') > 0} petEl={petAt(-30)} />}
 
-          {activity === 'wander' && <Wander look={look} u={u} size={size} base={base} aura={aura} celebrate={celebrate} petStrip={petStrip} />}
+          {activity === 'wander' && <Travel look={look} u={u} size={size} base={base} aura={aura} celebrate={celebrate} petStrip={petStrip} />}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -220,64 +218,28 @@ function Fishing({ look, region, u, size, base, feet, aura, celebrate, hasDock, 
   );
 }
 
-/** Walks to random spots, pauses, turns around. */
-function Wander({ look, u, size, base, aura, celebrate, petStrip }: { look: SpriteLook; u: number; size: number; base: number; aura?: string; celebrate?: number | string; petStrip?: Strip | null }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  const [moving, setMoving] = useState(false);
-  const [left, setLeft] = useState(false);
-  const controls = useAnimationControls();
-  const reduce = useReducedMotion();
-
-  useLayoutEffect(() => {
-    const el = ref.current?.parentElement;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const range = useMemo(() => Math.max(0, width / 2 - 26 * u), [width, u]);
-
-  useEffect(() => {
-    if (!range || reduce) return;
-    let alive = true;
-    let x = 0;
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    (async () => {
-      while (alive) {
-        await sleep(1500 + Math.random() * 3000);
-        if (!alive) break;
-        const target = (Math.random() * 2 - 1) * range;
-        if (Math.abs(target - x) < 12 * u) continue;
-        setLeft(target < x);
-        setMoving(true);
-        const dur = Math.abs(target - x) / (11 * u); // ~11 sprite px per second
-        await controls.start({ x: target, transition: { duration: dur, ease: 'linear' } });
-        x = target;
-        if (!alive) break;
-        setMoving(false);
-      }
-    })();
-    return () => {
-      alive = false;
-      controls.stop();
-    };
-  }, [range, u, controls, reduce]);
-
+/** On the road: the hero strides on the spot while the world scrolls past behind. */
+function Travel({ look, u, size, base, aura, celebrate, petStrip }: { look: SpriteLook; u: number; size: number; base: number; aura?: string; celebrate?: number | string; petStrip?: Strip | null }) {
   return (
-    <div ref={ref} className="absolute" style={at(0, 32, u, base)}>
-      <motion.div animate={controls} initial={{ x: 0 }}>
-        <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} pose={moving ? 'walk' : 'idle'} flip={left} />
-        {petStrip && (
-          <Prop
-            strip={petStrip}
-            u={u}
-            speed={moving ? 0.25 : 0.9}
-            style={{ left: `${(left ? 26 : -petStrip.w + 6) * u}px`, bottom: u, transform: left ? 'scaleX(-1)' : undefined, transition: 'left .4s ease' }}
-          />
-        )}
+    <>
+      {petStrip && (
+        <motion.div
+          className="absolute"
+          style={at(-24, petStrip.w, u, base + u)}
+          animate={{ x: [0, 3 * u, 0, -2 * u, 0] }}
+          transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <Prop strip={petStrip} u={u} speed={0.25} style={{ left: 0, bottom: 0 }} />
+        </motion.div>
+      )}
+      <motion.div
+        className="absolute"
+        style={at(4, 32, u, base)}
+        animate={{ x: [0, 4 * u, 0, -3 * u, 0] }}
+        transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} pose="walk" />
       </motion.div>
-    </div>
+    </>
   );
 }

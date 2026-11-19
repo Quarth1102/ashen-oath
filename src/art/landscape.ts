@@ -6,38 +6,38 @@ export const LW = 256;
 export const LH = 128;
 export const GROUND_Y = 106;
 
-const BAYER = [
+export const BAYER = [
   [0, 8, 2, 10],
   [12, 4, 14, 6],
   [3, 11, 1, 9],
   [15, 7, 13, 5],
 ];
 
-type Ctx2 = CanvasRenderingContext2D;
+export type Ctx2 = CanvasRenderingContext2D;
 
-function canvas(): [HTMLCanvasElement, Ctx2] {
+export function canvas(): [HTMLCanvasElement, Ctx2] {
   const c = document.createElement('canvas');
   c.width = LW;
   c.height = LH;
   return [c, c.getContext('2d')!];
 }
 
-const px = (ctx: Ctx2, x: number, y: number, c: string) => {
+export const px = (ctx: Ctx2, x: number, y: number, c: string) => {
   ctx.fillStyle = c;
   ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
 };
-const rect = (ctx: Ctx2, x: number, y: number, w: number, h: number, c: string) => {
+export const rect = (ctx: Ctx2, x: number, y: number, w: number, h: number, c: string) => {
   ctx.fillStyle = c;
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 };
-function tri(ctx: Ctx2, cx: number, top: number, halfW: number, h: number, c: string) {
+export function tri(ctx: Ctx2, cx: number, top: number, halfW: number, h: number, c: string) {
   for (let j = 0; j < h; j++) {
     const w = Math.round((j / h) * halfW);
     rect(ctx, cx - w, top + j, w * 2 + 1, 1, c);
   }
 }
 
-function noise1d(rng: () => number, step: number) {
+export function noise1d(rng: () => number, step: number) {
   const pts = Array.from({ length: Math.ceil(LW / step) + 3 }, () => rng());
   return (x: number) => {
     const i = Math.floor(x / step);
@@ -126,7 +126,7 @@ function drawFar(r: Region, rng: () => number) {
   return c;
 }
 
-function deadTree(ctx: Ctx2, x: number, base: number, h: number, col: string, rng: () => number) {
+export function deadTree(ctx: Ctx2, x: number, base: number, h: number, col: string, rng: () => number) {
   rect(ctx, x, base - h, 2, h, col);
   const branch = (bx: number, by: number, dir: number, len: number) => {
     for (let i = 0; i < len; i++) px(ctx, bx + dir * i, by - Math.floor(i * 0.7), col);
@@ -135,7 +135,7 @@ function deadTree(ctx: Ctx2, x: number, base: number, h: number, col: string, rn
   for (let i = 0; i < 4; i++) branch(x + (i % 2), base - h + 3 + Math.floor(rng() * h * 0.5), i % 2 ? 1 : -1, 4 + Math.floor(rng() * 6));
 }
 
-function pine(ctx: Ctx2, x: number, base: number, h: number, col: string) {
+export function pine(ctx: Ctx2, x: number, base: number, h: number, col: string) {
   rect(ctx, x, base - 4, 1, 4, col);
   const tiers = Math.max(3, Math.floor(h / 9));
   for (let t = 0; t < tiers; t++) {
