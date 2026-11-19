@@ -350,3 +350,207 @@ export function renderSideWalk(look: SpriteLook, frame = 0): Cell[] {
   g.outline();
   return g.px;
 }
+
+/* ── at camp: seated, kneeling and standing poses ───────────────────────────── */
+
+export type SidePose = 'fish' | 'warm' | 'tend' | 'clean' | 'cook' | 'read' | 'drink' | 'stand' | 'pet';
+export const SIDE_FRAMES: Record<SidePose, number> = { fish: 2, warm: 2, tend: 2, clean: 4, cook: 2, read: 4, drink: 4, stand: 2, pet: 2 };
+
+/** Thick limb stamped as a square brush, for limbs that run sideways. */
+function limbSq(g: Grid, a: Pt, b: Pt, w: number, c: string) {
+  const steps = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), 1);
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(a[0] + ((b[0] - a[0]) * i) / steps);
+    const y = Math.round(a[1] + ((b[1] - a[1]) * i) / steps);
+    g.rect(x - Math.floor(w / 2), y - Math.floor(w / 2), w, w, c);
+  }
+}
+
+function line(g: Grid, a: Pt, b: Pt, c: string, tip?: string) {
+  const steps = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), 1);
+  for (let i = 0; i <= steps; i++) g.set(Math.round(a[0] + ((b[0] - a[0]) * i) / steps), Math.round(a[1] + ((b[1] - a[1]) * i) / steps), c);
+  if (tip) g.set(b[0], b[1], tip);
+}
+
+const WOOD = '#5a3e2b';
+
+/** Sitting on a log (or a rock), knees forward, boots planted. */
+function seatedLegs(g: Grid, seat: 'log' | 'rock') {
+  if (seat === 'log') {
+    g.srect(9, 27, 10, 4, WOOD);
+    g.rect(9, 27, 10, 1, shade(WOOD, 0.2));
+    g.rect(9, 28, 2, 2, '#8a6a48'); // cut end with rings
+    g.set(10, 28, shade('#8a6a48', -0.3));
+  } else {
+    g.srect(9, 27, 10, 4, '#4a4450');
+    g.rect(10, 27, 7, 1, '#5e5866');
+  }
+  for (const far of [true, false]) {
+    const pants = shade(PANTS, far ? -0.2 : 0.2);
+    const kx = far ? 21 : 22;
+    limbSq(g, [16, 27], [kx, 27], 2, pants);
+    g.rect(kx - 1, 27, 2, 3, pants);
+    g.rect(kx - 1, 29, 5, 2, shade(BOOTS, far ? -0.25 : 0));
+    if (!far) g.rect(kx - 1, 29, 3, 1, shade(BOOTS, 0.15));
+  }
+}
+
+/** One knee down, the other foot planted forward. */
+function kneelingLegs(g: Grid) {
+  const farP = shade(PANTS, -0.2);
+  const nearP = shade(PANTS, 0.2);
+  // far leg: foot forward, knee up
+  limbSq(g, [16, 26], [20, 25], 2, farP);
+  g.rect(20, 25, 2, 5, farP);
+  g.rect(19, 29, 5, 2, shade(BOOTS, -0.25));
+  // near leg: knee on the ground, shin back along it
+  limbSq(g, [16, 26], [17, 29], 2, nearP);
+  g.rect(11, 29, 7, 2, nearP);
+  g.rect(9, 29, 3, 2, BOOTS);
+  g.set(9, 28, BOOTS);
+}
+
+function blade(look: SpriteLook): { c: string; t: string } {
+  const w = lookOf(look.equipped, 'weapon');
+  if (w && (w.style === 'sword' || w.style === 'dagger' || w.style === 'axe' || w.style === 'scythe')) return { c: w.color, t: w.trim };
+  return { c: '#c9c3b8', t: '#8a7a62' };
+}
+
+export function renderSidePose(look: SpriteLook, pose: SidePose, frame = 0): Cell[] {
+  const f = frame % SIDE_FRAMES[pose];
+  const g = new Grid();
+  const ap = look.appearance;
+  const eq = look.equipped;
+  const helm = lookOf(eq, 'helm');
+  const armor = lookOf(eq, 'armor');
+  const cloak = lookOf(eq, 'cloak');
+  const weapon = lookOf(eq, 'weapon');
+  const sleeve = armor ? (armor.style === 'chain' ? shade(armor.color, -0.1) : armor.color) : TUNIC;
+  const kneel = pose === 'tend' || pose === 'pet';
+  const stand = pose === 'stand';
+  const oy = stand ? f % 2 : kneel ? 3 : 5;
+
+  // where the hands go, per pose and frame
+  let near: Pt = [20, 22 + oy];
+  let far: Pt = [19, 23 + oy];
+  const after: ((g: Grid) => void)[] = []; // drawn over the near arm
+  const before: ((g: Grid) => void)[] = []; // drawn under the near arm
+  switch (pose) {
+    case 'fish': {
+      near = [21, 22];
+      far = [20, 23];
+      const dip = f;
+      before.push((g) => {
+        line(g, [20, 25], [31, 9 + dip], '#6b4a2a', shade('#6b4a2a', 0.3));
+        g.set(21, 24, '#2a1a14'); // reel
+      });
+      break;
+    }
+    case 'warm':
+      near = f ? [23, 21] : [22, 22];
+      far = f ? [22, 22] : [23, 21];
+      break;
+    case 'tend': {
+      const push = f;
+      near = [21 + push, 22];
+      far = [20, 24];
+      before.push((g) => line(g, [20 + push, 21], [30 + push, 28], WOOD, '#f08c32'));
+      break;
+    }
+    case 'clean': {
+      const { c, t } = blade(look);
+      far = [13, 24];
+      near = [[18, 23], [21, 23], [24, 23], [21, 23]][f] as Pt;
+      before.push((g) => {
+        g.rect(11, 25, 3, 1, LEATHER); // grip
+        g.rect(14, 24, 1, 3, t); // crossguard
+        g.rect(15, 25, 12, 1, c);
+        g.rect(15, 26, 11, 1, shade(c, -0.35));
+        g.set(27, 25, shade(c, 0.3));
+        g.set(10, 25, t); // pommel
+      });
+      after.push((g) => {
+        g.rect(near[0] - 1, near[1] + 1, 3, 2, '#d8cfbf'); // the cloth
+        g.set(near[0] + 1, near[1] + 2, '#b5ab9b');
+        if (f === 2) g.set(26, 24, '#fff6d8'); // a glint
+      });
+      break;
+    }
+    case 'cook': {
+      const bob = f;
+      near = [21, 22];
+      far = [20, 26];
+      before.push((g) => {
+        line(g, [20, 23], [30, 15 + bob], WOOD);
+        g.srect(28, 14 + bob, 3, 3, '#8a4a2a'); // supper on a stick
+        g.set(28, 14 + bob, '#b0703a');
+        if (bob) g.set(29, 18, '#e0a33a'); // a drip of fat
+      });
+      break;
+    }
+    case 'read': {
+      near = [24, 23];
+      far = [19, 23];
+      before.push((g) => {
+        g.rect(19, 21, 6, 4, '#e8dfcf');
+        g.rect(21, 21, 1, 4, '#b5ab9b');
+        g.rect(19, 25, 6, 1, '#5e1219'); // cover
+        for (const y of [22, 23]) { g.rect(19, y, 2, 1, '#9a9080'); g.rect(22, y, 2, 1, '#9a9080'); }
+        if (f === 3) g.rect(22, 20, 2, 1, '#e8dfcf'); // page turning
+      });
+      break;
+    }
+    case 'drink': {
+      const up = f >= 2;
+      near = up ? [19, 19] : [21, 25];
+      far = [20, 26];
+      after.push((g) => {
+        const [mx, my] = up ? [20, 15] : [22, 23];
+        const mug = '#a07850';
+        g.rect(mx, my, 3, 3, mug);
+        g.rect(mx, my + 1, 3, 1, shade(mug, -0.35)); // a band
+        g.set(mx + 3, my + 1, mug); // handle
+        if (!up) g.rect(mx, my, 3, 1, '#c9a26a'); // the brew
+        if (!up) g.set(mx + 1, my - 2 - (f % 2), 'rgba(220,220,230,0.6)'); // steam
+      });
+      break;
+    }
+    case 'pet':
+      near = [24, 26 + (f ? 1 : 0)];
+      far = [20, 25];
+      break;
+    case 'stand':
+      far = [15, 22 + oy];
+      near = weapon ? [19, 21 + oy] : [17, 22 + oy];
+      break;
+  }
+
+  if (cloak) drawCloak(g, cloak, oy, stand ? f : 1);
+  drawArm(g, far, sleeve, ap.skin, oy, true);
+  if (stand) {
+    drawLeg(g, 'support', true, 23 + oy);
+    drawLeg(g, 'support', false, 23 + oy);
+    // nudge the far boot back so the stance reads
+    g.rect(13, 29, 2, 2, shade(BOOTS, -0.25));
+  } else if (kneel) kneelingLegs(g);
+  else seatedLegs(g, pose === 'fish' ? 'rock' : 'log');
+  drawTorso(g, armor, oy, 1);
+  if (cloak) {
+    g.rect(14, 14 + oy, 4, 2, cloak.color);
+    g.set(17, 15 + oy, cloak.trim);
+  }
+  drawHeadSide(g, ap, oy);
+  const hairHidden = helm && (helm.style === 'greathelm' || helm.style === 'hood');
+  if (!hairHidden) drawHairSide(g, ap, oy, stand ? f : 0);
+  if (helm) drawHelmSide(g, helm, ap, oy);
+  drawPauldron(g, armor, oy);
+  const shaft = stand && weapon && (weapon.style === 'staff' || weapon.style === 'scythe');
+  if (stand && weapon && shaft) drawWeaponSide(g, weapon, [21, 19 + oy], 0);
+  for (const d of before) d(g);
+  drawArm(g, shaft ? [21, 19 + oy] : near, sleeve, ap.skin, oy, false);
+  if (armor?.style === 'robe') g.rect(near[0] - 1, near[1], 2, 1, armor.trim);
+  if (stand && weapon && !shaft) drawWeaponSide(g, weapon, near, 0);
+  for (const d of after) d(g);
+  g.outline();
+  return g.px;
+}

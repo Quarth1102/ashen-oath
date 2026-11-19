@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCheck, Flame, Palmtree, Plus } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { useActivity, useHeroClass, useHeroLook, useNow, useRegion, useToday } from '../hooks';
+import { useActivity, useChore, useHeroClass, useHeroLook, useNow, useRegion, useToday } from '../hooks';
 import { COMBO_WINDOW_MS } from '../game/engine';
 import Landscape from '../components/Landscape';
 import HeroScene, { type SceneActivity } from '../components/HeroScene';
@@ -12,6 +12,8 @@ import BackupNudge from '../components/BackupNudge';
 import DailyQuests from '../components/DailyQuests';
 import { parseDay } from '../game/dates';
 import { activityCaption } from '../game/activity';
+import { choreCaption } from '../game/chores';
+import { PET_BY_ID } from '../data/camp';
 import { GoalCard, HabitCard, TodoCard } from '../components/ItemCards';
 import ItemEditor, { type EditTarget } from '../components/ItemEditor';
 import { Empty } from '../components/ui';
@@ -44,6 +46,7 @@ export default function Camp() {
   const perfect = useGame((s) => !!s.perfectDays?.[today]);
   const doing: SceneActivity = vacation ? 'away' : activityNow;
   const region = useRegion();
+  const chore = useChore(doing, !!camp?.pet);
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const events = useGame((s) => s.events);
   // remember the last reward so the hero's leap isn't cut short when the event is cleared
@@ -103,7 +106,7 @@ export default function Camp() {
     <div className="space-y-5">
       <div className="relative -mx-4 -mt-4 md:mx-0 md:mt-0">
         <Landscape region={region} travel={doing === 'wander'} className="h-[46vh] min-h-[300px] w-full md:rounded-2xl md:ring-1 md:ring-ash-600/50">
-          {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={cheer} camp={camp} perfect={perfect} combo={comboLive} />}
+          {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={cheer} camp={camp} perfect={perfect} combo={comboLive} chore={chore} />}
         </Landscape>
         <AmbientSound activity={doing} />
         {/* the sky warms as the day fills up */}
@@ -131,8 +134,8 @@ export default function Camp() {
             <p className="h-display mt-1 text-xl font-bold drop-shadow-[0_2px_6px_rgba(0,0,0,.9)]">{greeting(new Date().getHours())}, {hero.name}.</p>
             <p className="text-xs text-ember-light/90 drop-shadow">{hero.name} {hero.title}</p>
             <AnimatePresence mode="wait">
-              <motion.p key={doing} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-1 text-xs italic text-bone-dim drop-shadow" data-testid="activity-caption">
-                {doing === 'away' ? `${hero.name} is away on a journey. The camp waits.` : activityCaption(doing, hero.name)}
+              <motion.p key={`${doing}-${chore ?? ''}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-1 text-xs italic text-bone-dim drop-shadow" data-testid="activity-caption">
+                {doing === 'away' ? `${hero.name} is away on a journey. The camp waits.` : chore ? choreCaption(chore, hero.name, camp?.pet ? `the ${PET_BY_ID[camp.pet].name.toLowerCase()}` : undefined) : activityCaption(doing, hero.name)}
               </motion.p>
             </AnimatePresence>
           </div>

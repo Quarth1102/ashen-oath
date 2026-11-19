@@ -6,7 +6,7 @@ import type { Appearance, Slot } from '../game/types';
 import { GEAR_BY_ID, type GearLook } from '../data/gear';
 import { GLOWING_EYES } from '../data/appearance';
 import { mix, shade } from './color';
-import { renderSideWalk } from './sideSprite';
+import { SIDE_FRAMES, renderSidePose, renderSideWalk, type SidePose } from './sideSprite';
 
 export const SPRITE = 32;
 const OUTLINE = '#0a070c';
@@ -420,9 +420,10 @@ function drawWeapon(g: Grid, w: GearLook, oy: number) {
 }
 
 /** Poses for the camp scene. */
-export type Pose = 'idle' | 'walk' | 'sit' | 'fish' | 'sleep';
+export type Pose = 'idle' | 'walk' | 'sit' | 'sleep' | SidePose;
 
-export const POSE_FRAMES: Record<Pose, number> = { idle: 2, walk: 4, sit: 2, fish: 2, sleep: 2 };
+export const POSE_FRAMES: Record<Pose, number> = { idle: 2, walk: 4, sit: 2, sleep: 2, ...SIDE_FRAMES };
+const SIDE = new Set(Object.keys(SIDE_FRAMES));
 
 /** Fishing rod held in the right hand, angling up and out to the right. */
 function drawRod(g: Grid, handY: number, dip: number) {
@@ -439,6 +440,7 @@ function drawRod(g: Grid, handY: number, dip: number) {
 
 export function renderHeroGrid(look: SpriteLook, frame = 0, pose: Pose = 'idle'): Cell[] {
   if (pose === 'walk') return renderSideWalk(look, frame);
+  if (SIDE.has(pose)) return renderSidePose(look, pose as SidePose, frame);
   const g = new Grid();
   const seated = pose === 'sit' || pose === 'fish';
   // how far the upper body sits below its standing position

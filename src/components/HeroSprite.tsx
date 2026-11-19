@@ -18,7 +18,8 @@ interface Props {
   flip?: boolean;
 }
 
-const POSE_SPEED: Record<Pose, number> = { idle: 1.3, walk: 0.6, sit: 2.2, fish: 2.6, sleep: 3.2 };
+const POSE_SPEED: Record<Pose, number> = { idle: 1.3, walk: 0.6, sit: 2.2, fish: 2.6, sleep: 3.2, warm: 1.8, tend: 0.9, clean: 1.6, cook: 2, read: 6, drink: 5, stand: 1.4, pet: 0.8 };
+const SEATED = new Set<Pose>(['sit', 'fish', 'warm', 'clean', 'cook', 'read', 'drink', 'tend', 'pet']);
 
 export default function HeroSprite({ look, size = 128, aura, idle = true, celebrate, shadow = true, className = '', pose = 'idle', flip = false }: Props) {
   const sheet = useMemo(() => heroSheet(look, pose), [look, pose]);
@@ -34,7 +35,7 @@ export default function HeroSprite({ look, size = 128, aura, idle = true, celebr
       {shadow && (
         <div
           className="absolute left-1/2 -translate-x-1/2 rounded-[50%] bg-black/60"
-          style={{ width: size * (pose === 'sit' || pose === 'fish' ? 0.62 : 0.42), height: size * 0.07, bottom: size * 0.02 }}
+          style={{ width: size * (SEATED.has(pose) ? 0.62 : 0.42), height: size * 0.07, bottom: size * 0.02 }}
         />
       )}
       {celebrate !== undefined && <Sparks key={`s-${celebrate}`} size={size} color={aura ?? '#f5c96a'} />}

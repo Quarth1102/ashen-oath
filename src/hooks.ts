@@ -7,6 +7,7 @@ import type { Hero } from './game/types';
 import { resolveClass } from './game/classes';
 import type { ClassInfo } from './data/classes';
 import { ACTIVITIES, activityAt, type Activity } from './game/activity';
+import { CHORES, CHORE_MAX_MS, CHORE_MIN_MS, hasChores, pickChore, type Chore } from './game/chores';
 
 export function useNow(intervalMs = 60_000) {
   const [now, setNow] = useState(() => new Date());
@@ -77,4 +78,38 @@ export function useActivity(): Activity {
   const forced = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('activity') : null;
   if (forced && (ACTIVITIES as string[]).includes(forced)) return forced as Activity;
   return activityAt(now, seed);
+}
+
+/**
+ * The chore the hero is busy with at camp, changing every 14–28 seconds.
+ * `?chore=cook` (etc.) pins one, for previews.
+ */
+export function useChore(activity: string, hasPet: boolean): Chore | null {
+  const active = hasChores(activity);
+  const forced = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('chore') : null;
+  const pinned = forced && (CHORES as string[]).includes(forced) ? (forced as Chore) : null;
+  const [chore, setChore] = useState<Chore | null>(() => (active ? pinned ?? pickChore(activity as Activity, null, hasPet) : null));
+  useEffect(() => {
+    if (!active) {
+      setChore(null);
+      return;
+    }
+    if (pinned) {
+      setChore(pinned);
+      return;
+    }
+    let current = pickChore(activity as Activity, null, hasPet);
+    setChore(current);
+    let t: ReturnType<typeof setTimeout>;
+    const next = () => {
+      t = setTimeout(() => {
+        current = pickChore(activity as Activity, current, hasPet);
+        setChore(current);
+        next();
+      }, CHORE_MIN_MS + Math.random() * (CHORE_MAX_MS - CHORE_MIN_MS));
+    };
+    next();
+    return () => clearTimeout(t);
+  }, [active, activity, hasPet, pinned]);
+  return active ? chore : null;
 }

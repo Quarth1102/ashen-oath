@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import HeroSprite from './HeroSprite';
 import type { SpriteLook } from '../art/sprite';
@@ -6,6 +6,8 @@ import { banner, bedroll, sleeper, campfire, dock, embers, lanternPost, pet, pon
 import { DEFAULT_CAMP, FIRE_COLORS, tierOf, type CampState } from '../data/camp';
 import type { Region } from '../data/regions';
 import type { Activity } from '../game/activity';
+import type { Chore } from '../game/chores';
+import type { Pose } from '../art/sprite';
 export type SceneActivity = Activity | 'away';
 
 interface Props {
@@ -24,6 +26,8 @@ interface Props {
   perfect?: boolean;
   /** current combo count: the fire swells with it */
   combo?: number;
+  /** what the hero is busy with at camp */
+  chore?: Chore | null;
 }
 
 /** A prop strip rendered at sprite-pixel scale, animated if it has frames. */
@@ -48,7 +52,8 @@ export function Prop({ strip, u, style, speed = 0.5 }: { strip: Strip; u: number
 /** Places something centred at x (sprite px from the middle) with its bottom at `bottom` px. */
 const at = (x: number, w: number, u: number, bottom: number): CSSProperties => ({ left: `calc(50% + ${(x - w / 2) * u}px)`, bottom });
 
-export default function HeroScene({ look, activity, region, ground, scale, zoom = 1.15, aura, celebrate, camp = DEFAULT_CAMP, perfect = false, combo = 0 }: Props) {
+export default function HeroScene({ look, activity, region, ground, scale, zoom = 1.15, aura, celebrate, camp = DEFAULT_CAMP, perfect = false, combo = 0, chore = null }: Props) {
+  const stoking = chore === 'tend';
   const heat = Math.min(Math.max(combo - 1, 0), 6); // 0..6
   const u = scale * zoom; // CSS px per sprite pixel
   const size = Math.round(32 * u);
@@ -76,7 +81,8 @@ export default function HeroScene({ look, activity, region, ground, scale, zoom 
       {tierOf(camp, 'rack') > 0 && <Prop strip={rack()} u={u} style={at(36, 16, u, feet + u)} />}
       {lit ? (
         <>
-          <FireGlow x={fireX} u={u} bottom={feet} color={flame[1]} big={perfect} boost={heat} />
+          <FireGlow x={fireX} u={u} bottom={feet} color={flame[1]} big={perfect} boost={heat + (stoking ? 3 : 0)} />
+          {stoking && <Stoked x={fireX} u={u} bottom={feet} color={flame[1]} />}
           <motion.div
             className="absolute"
             style={{ ...at(fireX, fireStrip.w, u, feet), width: fireStrip.w * u, height: fireStrip.h * u, transformOrigin: '50% 100%' }}
@@ -99,26 +105,13 @@ export default function HeroScene({ look, activity, region, ground, scale, zoom 
   return (
     <div className="pointer-events-none absolute inset-0">
       <AnimatePresence mode="wait">
-        <motion.div key={activity} className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}>
-          {activity === 'watch' && (
-            <>
-              {campsite(20, true)}
-              {petAt(-26)}
-              <div className="absolute" style={at(0, 32, u, base)}>
-                <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} />
-              </div>
-            </>
-          )}
-
+        <motion.div key={activity === 'watch' ? 'camp' : activity} className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}>
           {activity === 'away' && campsite(18, false)}
 
-          {activity === 'camp' && (
+          {(activity === 'camp' || activity === 'watch') && (
             <>
               {campsite(18, true)}
-              {petAt(-24)}
-              <div className="absolute" style={at(-2, 32, u, base)}>
-                <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} pose="sit" />
-              </div>
+              <CampLife chore={chore ?? 'warm'} look={look} u={u} size={size} base={base} feet={feet} aura={aura} celebrate={celebrate} petStrip={petStrip} />
             </>
           )}
 
@@ -241,5 +234,56 @@ function Travel({ look, u, size, base, aura, celebrate, petStrip }: { look: Spri
         <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} pose="walk" />
       </motion.div>
     </>
+  );
+}
+
+/** Where the hero sits (sprite px from centre) for each chore; the fire is at +18. */
+const CHORE_SPOT: Record<Chore, number> = { warm: 2, clean: 0, cook: 2, read: -2, drink: 0, tend: 4, stand: -6, pet: -14 };
+
+/** Life around the fire: the hero busies themselves with one chore after another. */
+function CampLife({ chore, look, u, size, base, feet, aura, celebrate, petStrip }: { chore: Chore; look: SpriteLook; u: number; size: number; base: number; feet: number; aura?: string; celebrate?: number | string; petStrip?: Strip | null }) {
+  const [glance, setGlance] = useState(false);
+  useEffect(() => {
+    if (chore !== 'stand') return setGlance(false);
+    let t: ReturnType<typeof setTimeout>;
+    const look = () => {
+      t = setTimeout(() => {
+        setGlance((g) => !g);
+        look();
+      }, 3500 + Math.random() * 5000);
+    };
+    look();
+    return () => clearTimeout(t);
+  }, [chore]);
+  const x = CHORE_SPOT[chore];
+  // the pet comes over to be fussed; otherwise it lies by the tent
+  const petX = chore === 'pet' ? x - 16 + 28 : chore === 'stand' ? -28 : -24;
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div key={chore} className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.45 }}>
+        {petStrip && <Prop strip={petStrip} u={u} style={{ ...at(petX, petStrip.w, u, feet), transform: chore === 'pet' ? 'scaleX(-1)' : undefined }} speed={chore === 'pet' ? 0.35 : 0.9} />}
+        <div className="absolute" style={at(x, 32, u, base)}>
+          <HeroSprite look={look} size={size} aura={aura} celebrate={celebrate} pose={chore as Pose} flip={glance} />
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+/** Sparks flung up while the fire is being stoked. */
+function Stoked({ x, u, bottom, color }: { x: number; u: number; bottom: number; color: string }) {
+  return (
+    <div className="absolute" style={{ left: `calc(50% + ${x * u}px)`, bottom: bottom + 6 * u }}>
+      {Array.from({ length: 7 }, (_, i) => (
+        <motion.span
+          key={i}
+          className="absolute"
+          style={{ width: Math.max(2, u * 0.8), height: Math.max(2, u * 0.8), background: i % 2 ? '#ffd27a' : color, boxShadow: `0 0 ${u * 2}px ${color}` }}
+          initial={{ x: 0, y: 0, opacity: 0 }}
+          animate={{ x: [0, (i % 3 - 1) * 4 * u + (i % 2 ? 2 : -2) * u], y: [0, -(12 + (i % 4) * 4) * u], opacity: [0, 1, 0] }}
+          transition={{ duration: 1.3 + (i % 3) * 0.3, repeat: Infinity, delay: i * 0.27, ease: 'easeOut' }}
+        />
+      ))}
+    </div>
   );
 }
