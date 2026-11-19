@@ -35,6 +35,7 @@ npm run build    # production build + PWA service worker in dist/
 - **Camp tab:** spend gold on tycoon-style upgrades (tent, hearth, banner, weapon rack, lanterns, fishing dock) that grant max HP, HP regen, gold or XP perks. Adopt a pet (raven, black cat, wolf pup) and customize tent colour, fire colour, and banner colour and sigil. Everything shows up in the home scene.
 - **Weekly Chronicle:** when a new week starts, a recap shows last week's XP, deeds, perfect days, best day, stats trained, how each habit held up, and one suggestion. Past weeks live in Chronicle → Weeks.
 - **Vacation mode** (Settings): no penalties, no check-ins and frozen streaks while you're away, optionally until a return date. Deeds still earn XP, and the camp sits empty until you return.
+- **Feedback:** completing anything sends XP orbs flying to your XP bar, which shimmers when they land. Your hero leaps in a burst of sparks, the campfire swells with your combo, and the sky warms as the day fills up. Small notices (achievements, stat-ups, chests) merge into a single ticker line per action. Big moments (level up, new rank, new gear, perfect day) play as one stepped sequence.
 - **Sound & feel:** synthesized sword chime, level-up arpeggio, perfect-day fanfare, ambient fire/water/wind/crickets that follow your hero's activity, and vibration on Android. Each can be toggled in Settings.
 - **Regions** unlock as you level: Ashen Hamlet (1), Gloomwood (5), Drowned Marsh (10), Bone Cathedral (20), Obsidian Peaks (35).
 

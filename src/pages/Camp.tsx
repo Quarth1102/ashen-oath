@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCheck, Flame, Palmtree, Plus } from 'lucide-react';
 import { useGame } from '../store/useGame';
-import { useActivity, useHeroClass, useHeroLook, useRegion, useToday } from '../hooks';
+import { useActivity, useHeroClass, useHeroLook, useNow, useRegion, useToday } from '../hooks';
+import { COMBO_WINDOW_MS } from '../game/engine';
 import Landscape from '../components/Landscape';
 import HeroScene, { type SceneActivity } from '../components/HeroScene';
 import AmbientSound from '../components/AmbientSound';
@@ -45,7 +46,16 @@ export default function Camp() {
   const region = useRegion();
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const events = useGame((s) => s.events);
-  const lastReward = [...events].reverse().find((e) => e.type === 'reward' || e.type === 'levelup');
+  // remember the last reward so the hero's leap isn't cut short when the event is cleared
+  const [cheer, setCheer] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const r = [...events].reverse().find((e) => e.type === 'reward' || e.type === 'levelup');
+    if (r) setCheer(r.id);
+  }, [events]);
+  const comboState = useGame((s) => s.combo);
+  const nowTick = useNow(1000).getTime();
+  const comboLive = comboState && nowTick - comboState.lastTs < COMBO_WINDOW_MS ? comboState.count : 0;
+  const quests = useGame((s) => s.dailyQuests);
 
   // everything relevant today: due virtues, no-penalty virtues, and vices
   const defs = useGame((s) => s.statDefs);
@@ -53,6 +63,9 @@ export default function Camp() {
   const due = todays.filter((h) => h.polarity === 'good' && isDueOn(h, today));
   const doneCount = due.filter((h) => h.history[today]).length;
   const goodDue = due.length;
+  const questTotal = quests?.day === today ? quests.quests.length : 0;
+  const questDone = quests?.day === today ? quests.quests.filter((q) => q.done).length : 0;
+  const dayProgress = goodDue + questTotal ? (doneCount + questDone) / (goodDue + questTotal) : 0;
   const maxed = (h: Habit) => h.polarity === 'good' && logsOn(h, today) >= dailyLimit(h);
 
   // A habit that just hit its limit lingers ~1.2s so its checkmark and reward play, then leaves until tomorrow.
@@ -90,9 +103,15 @@ export default function Camp() {
     <div className="space-y-5">
       <div className="relative -mx-4 -mt-4 md:mx-0 md:mt-0">
         <Landscape region={region} className="h-[46vh] min-h-[300px] w-full md:rounded-2xl md:ring-1 md:ring-ash-600/50">
-          {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={lastReward?.id} camp={camp} perfect={perfect} />}
+          {(g, s) => <HeroScene look={look} activity={doing} region={region} ground={g} scale={s} aura={cls.aura} celebrate={cheer} camp={camp} perfect={perfect} combo={comboLive} />}
         </Landscape>
         <AmbientSound activity={doing} />
+        {/* the sky warms as the day fills up */}
+        <div
+          className="pointer-events-none absolute inset-0 mix-blend-screen transition-opacity duration-1000 md:rounded-2xl"
+          style={{ opacity: perfect ? 0 : dayProgress, background: 'radial-gradient(ellipse at 50% 100%, rgba(245,170,90,.32), transparent 65%)' }}
+          data-testid="day-glow"
+        />
         <AnimatePresence>
           {perfect && (
             <motion.div

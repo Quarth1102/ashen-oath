@@ -6,6 +6,7 @@ import { useToday } from '../hooks';
 import type { DailyQuest } from '../game/types';
 import { Icon } from './Icon';
 import { rgba } from '../art/color';
+import { flyXp } from '../fx';
 
 function QuestRow({ q, canReroll }: { q: DailyQuest; canReroll: boolean }) {
   const def = useGame((s) => s.statDefs.find((d) => d.id === q.pillar));
@@ -59,9 +60,10 @@ function QuestRow({ q, canReroll }: { q: DailyQuest; canReroll: boolean }) {
         <motion.button
           type="button"
           whileTap={{ scale: 0.85 }}
-          onClick={() => {
+          onClick={(e) => {
             if (q.done) uncompleteDailyQuest(q.id);
             else {
+              flyXp(e.currentTarget, color);
               completeDailyQuest(q.id);
               setFloat(Date.now());
             }

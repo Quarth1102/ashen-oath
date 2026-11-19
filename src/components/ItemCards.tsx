@@ -8,6 +8,7 @@ import { BASE_XP } from '../game/xp';
 import { diffDays, parseDay } from '../game/dates';
 import { Bar, SkullRating, StatBadge } from './ui';
 import { useToday } from '../hooks';
+import { flyXp } from '../fx';
 
 interface Float { id: number; text: string; color: string }
 let fid = 0;
@@ -68,8 +69,8 @@ function Burst({ color }: { color: string }) {
 }
 
 function CheckButton({
-  done, onClick, color = '#e0a33a', label, count = 0,
-}: { done: boolean; onClick: () => void; color?: string; label: string; count?: number }) {
+  done, onClick, color = '#e0a33a', label, count = 0, fx,
+}: { done: boolean; onClick: () => void; color?: string; label: string; count?: number; fx?: string }) {
   const [burstKey, setBurstKey] = useState(0);
   const partial = !done && count > 0;
   return (
@@ -80,7 +81,10 @@ function CheckButton({
       whileTap={{ scale: 0.85 }}
       onClick={(e) => {
         e.stopPropagation();
-        if (!done) setBurstKey((k) => k + 1);
+        if (!done) {
+          setBurstKey((k) => k + 1);
+          flyXp(e.currentTarget, fx ?? color);
+        }
         onClick();
       }}
       className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border-2 transition-colors"
@@ -163,6 +167,7 @@ export function HabitCard({ habit, onEdit }: { habit: Habit; onEdit?: () => void
       ) : (
         <CheckButton
           done={done}
+          fx={defs.find((d) => d.id === habit.statIds[0])?.color}
           count={repeatable ? count : 0}
           label={done ? (repeatable ? `${habit.title}: daily limit reached` : `Undo ${habit.title}`) : `${count ? 'Log again' : 'Complete'} ${habit.title}`}
           onClick={() => {
@@ -244,6 +249,7 @@ export function TodoCard({ todo, onEdit }: { todo: Todo; onEdit?: () => void }) 
       <CheckButton
         done={todo.done}
         color="#5fd1c1"
+        fx={defs.find((d) => d.id === todo.statIds[0])?.color}
         label={todo.done ? `Undo ${todo.title}` : `Complete ${todo.title}`}
         onClick={() => {
           if (todo.done) uncompleteTodo(todo.id);
@@ -305,8 +311,9 @@ export function GoalCard({ goal, onEdit, defaultOpen = false }: { goal: Goal; on
         <button
           type="button"
           className={`mt-3 w-full ${goal.done ? 'btn-ghost' : 'btn-primary'}`}
-          onClick={() => {
+          onClick={(e) => {
             const was = goal.done;
+            if (!was) flyXp(e.currentTarget, defs.find((d) => d.id === goal.statIds[0])?.color, 12);
             toggleGoal(goal.id);
             if (!was) push(lastRewardText());
           }}
@@ -321,8 +328,9 @@ export function GoalCard({ goal, onEdit, defaultOpen = false }: { goal: Goal; on
               <li key={m.id}>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
                     const was = m.done;
+                    if (!was) flyXp(e.currentTarget, defs.find((d) => d.id === goal.statIds[0])?.color);
                     toggleMilestone(goal.id, m.id);
                     if (!was) push(lastRewardText());
                   }}

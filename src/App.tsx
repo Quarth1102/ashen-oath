@@ -8,6 +8,7 @@ import { BottomNav, Hud, SideRail } from './components/Chrome';
 import EventLayer from './components/EventLayer';
 import ReviewModal from './components/ReviewModal';
 import PillarsNotice from './components/PillarsNotice';
+import XpFlightLayer from './components/XpFlightLayer';
 import Onboarding from './pages/Onboarding';
 import Camp from './pages/Camp';
 import Quests from './pages/Quests';
@@ -76,6 +77,7 @@ export default function App() {
         </div>
       </div>
       <BottomNav />
+      <XpFlightLayer />
       <PillarsNotice />
       <ReviewModal />
       <EventLayer />

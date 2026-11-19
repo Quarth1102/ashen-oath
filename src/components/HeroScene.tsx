@@ -22,6 +22,8 @@ interface Props {
   camp?: CampState;
   /** today was a perfect day: the fire roars */
   perfect?: boolean;
+  /** current combo count: the fire swells with it */
+  combo?: number;
 }
 
 /** A prop strip rendered at sprite-pixel scale, animated if it has frames. */
@@ -46,7 +48,8 @@ export function Prop({ strip, u, style, speed = 0.5 }: { strip: Strip; u: number
 /** Places something centred at x (sprite px from the middle) with its bottom at `bottom` px. */
 const at = (x: number, w: number, u: number, bottom: number): CSSProperties => ({ left: `calc(50% + ${(x - w / 2) * u}px)`, bottom });
 
-export default function HeroScene({ look, activity, region, ground, scale, zoom = 1.15, aura, celebrate, camp = DEFAULT_CAMP, perfect = false }: Props) {
+export default function HeroScene({ look, activity, region, ground, scale, zoom = 1.15, aura, celebrate, camp = DEFAULT_CAMP, perfect = false, combo = 0 }: Props) {
+  const heat = Math.min(Math.max(combo - 1, 0), 6); // 0..6
   const u = scale * zoom; // CSS px per sprite pixel
   const size = Math.round(32 * u);
   const base = ground - 4 * scale; // bottom of the hero's 32px box
@@ -73,8 +76,15 @@ export default function HeroScene({ look, activity, region, ground, scale, zoom 
       {tierOf(camp, 'rack') > 0 && <Prop strip={rack()} u={u} style={at(36, 16, u, feet + u)} />}
       {lit ? (
         <>
-          <FireGlow x={fireX} u={u} bottom={feet} color={flame[1]} big={perfect} />
-          <Prop strip={fireStrip} u={u} style={at(fireX, fireStrip.w, u, feet)} speed={perfect ? 0.1 : 0.16} />
+          <FireGlow x={fireX} u={u} bottom={feet} color={flame[1]} big={perfect} boost={heat} />
+          <motion.div
+            className="absolute"
+            style={{ ...at(fireX, fireStrip.w, u, feet), width: fireStrip.w * u, height: fireStrip.h * u, transformOrigin: '50% 100%' }}
+            animate={{ scale: 1 + heat * 0.08 }}
+            transition={{ type: 'spring', stiffness: 120, damping: 10 }}
+          >
+            <Prop strip={fireStrip} u={u} style={{ left: 0, bottom: 0 }} speed={perfect || heat > 2 ? 0.1 : 0.16} />
+          </motion.div>
         </>
       ) : (
         <>
@@ -133,8 +143,8 @@ export default function HeroScene({ look, activity, region, ground, scale, zoom 
   );
 }
 
-function FireGlow({ x, u, bottom, dim = false, big = false, color = '#f08c32' }: { x: number; u: number; bottom: number; dim?: boolean; big?: boolean; color?: string }) {
-  const w = (dim ? 34 : big ? 96 : 60) * u;
+function FireGlow({ x, u, bottom, dim = false, big = false, color = '#f08c32', boost = 0 }: { x: number; u: number; bottom: number; dim?: boolean; big?: boolean; color?: string; boost?: number }) {
+  const w = (dim ? 34 : big ? 96 : 60 + boost * 8) * u;
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
   return (
     <div

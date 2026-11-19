@@ -5,6 +5,8 @@ import { useGame } from '../store/useGame';
 import { heroXpToNext } from '../game/xp';
 import { Bar } from './ui';
 import ComboMeter from './ComboMeter';
+import { useEffect, useState } from 'react';
+import { XP_LAND } from '../fx';
 import HeroSprite from './HeroSprite';
 import { useHeroClass, useHeroLook } from '../hooks';
 
@@ -29,6 +31,13 @@ export function Hud() {
   const chests = useGame((s) => s.pendingChests);
   const look = useHeroLook();
   const cls = useHeroClass();
+  // shimmer the XP bar when flying orbs land
+  const [pulse, setPulse] = useState(0);
+  useEffect(() => {
+    const land = () => setPulse((p) => p + 1);
+    window.addEventListener(XP_LAND, land);
+    return () => window.removeEventListener(XP_LAND, land);
+  }, []);
   if (!hero || !look) return null;
   const need = heroXpToNext(hero.level);
   return (
@@ -52,7 +61,24 @@ export function Hud() {
         </div>
         <div className="flex items-center gap-2">
           <span className="w-6 font-pixel text-[10px] text-ember-light">XP</span>
-          <Bar value={hero.xp} max={need} color="#e0a33a" className="flex-1" height={7} glow />
+          <motion.div
+            data-xp-target
+            className="relative flex-1 rounded-full"
+            key={pulse}
+            animate={pulse ? { boxShadow: ['0 0 0px rgba(245,201,106,0)', '0 0 16px rgba(245,201,106,.9)', '0 0 0px rgba(245,201,106,0)'], scaleY: [1, 1.5, 1] } : undefined}
+            transition={{ duration: 0.6 }}
+          >
+            <Bar value={hero.xp} max={need} color="#e0a33a" height={7} glow />
+            {pulse > 0 && (
+              <motion.span
+                key={pulse}
+                className="pointer-events-none absolute inset-y-0 w-10 rounded-full bg-gradient-to-r from-transparent via-white/70 to-transparent"
+                initial={{ left: '-20%', opacity: 1 }}
+                animate={{ left: '110%', opacity: 0.2 }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+              />
+            )}
+          </motion.div>
           <span className="w-14 text-right text-[10px] font-medium text-bone-dim tabular-nums" data-testid="hud-xp">{hero.xp}/{need}</span>
         </div>
         <ComboMeter />
